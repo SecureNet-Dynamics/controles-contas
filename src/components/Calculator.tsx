@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface CalculatorProps {
   isOpen: boolean;
@@ -14,6 +14,50 @@ export default function Calculator({ isOpen, onClose, darkMode }: CalculatorProp
   const [operation, setOperation] = useState<string | null>(null);
   const [waitingForNewValue, setWaitingForNewValue] = useState(false);
 
+  // Keyboard support
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key;
+      if (key >= '0' && key <= '9') {
+        e.preventDefault();
+        inputNumber(key);
+      } else if (key === ',' || key === '.') {
+        e.preventDefault();
+        inputDecimal();
+      } else if (key === '+') {
+        e.preventDefault();
+        performOperation('+');
+      } else if (key === '-') {
+        e.preventDefault();
+        performOperation('-');
+      } else if (key === '*') {
+        e.preventDefault();
+        performOperation('×');
+      } else if (key === '/') {
+        e.preventDefault();
+        performOperation('÷');
+      } else if (key === 'Enter' || key === '=') {
+        e.preventDefault();
+        calculate();
+      } else if (key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      } else if (key === 'Backspace') {
+        e.preventDefault();
+        setDisplay(prev => {
+          if (prev.length <= 1) return '0';
+          return prev.slice(0, -1);
+        });
+      } else if (key.toLowerCase() === 'c') {
+        e.preventDefault();
+        clear();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, display, previousValue, operation, waitingForNewValue]);
+
   // Função para formatar o número para exibição
   const formatDisplay = (value: string): string => {
     if (value === '' || value === '0') return '0';
@@ -21,12 +65,13 @@ export default function Calculator({ isOpen, onClose, darkMode }: CalculatorProp
     // Se não tem vírgula, formata como número inteiro
     if (!value.includes(',')) {
       const number = parseInt(value, 10);
-      return number.toLocaleString('pt-BR');
+      return isNaN(number) ? value : number.toLocaleString('pt-BR');
     }
     
     // Se tem vírgula, formata parte inteira e mantém decimal
     const [integerPart, decimalPart] = value.split(',');
-    const formattedInteger = parseInt(integerPart || '0', 10).toLocaleString('pt-BR');
+    const number = parseInt(integerPart || '0', 10);
+    const formattedInteger = isNaN(number) ? (integerPart || '0') : number.toLocaleString('pt-BR');
     return `${formattedInteger},${decimalPart}`;
   };
 
@@ -85,18 +130,25 @@ export default function Calculator({ isOpen, onClose, darkMode }: CalculatorProp
   };
 
   const calculateResult = (a: number, b: number, op: string): number => {
+    let result = 0;
     switch (op) {
       case '+':
-        return a + b;
+        result = a + b;
+        break;
       case '-':
-        return a - b;
+        result = a - b;
+        break;
       case '×':
-        return a * b;
+        result = a * b;
+        break;
       case '÷':
-        return b !== 0 ? a / b : 0;
+        result = b !== 0 ? a / b : 0;
+        break;
       default:
-        return b;
+        result = b;
     }
+    // Fix floating point errors using round precision
+    return Math.round(result * 1e8) / 1e8;
   };
 
   const calculate = () => {

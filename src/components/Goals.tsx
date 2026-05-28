@@ -82,11 +82,14 @@ export default function Goals({ goals, setGoals, bills }: GoalsProps) {
   const getSpentForCategory = (category: string, period: Goal['period']) => {
     return bills
       .filter(b => {
-        const d = new Date(b.dueDate);
+        const parts = b.dueDate.split('-');
+        if (parts.length < 2) return false;
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1; // 0-indexed month
         if (period === 'monthly') {
-          return b.category === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+          return b.category === category && month === currentMonth && year === currentYear;
         }
-        return b.category === category && d.getFullYear() === currentYear;
+        return b.category === category && year === currentYear;
       })
       .reduce((s, b) => s + b.amount, 0);
   };

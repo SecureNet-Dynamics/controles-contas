@@ -143,12 +143,15 @@ export default function IncomeManager({ incomes, setIncomes, addNotification }: 
 
   const exportCsv = () => {
     const rows = [['Descrição', 'Valor', 'Data', 'Categoria', 'Status', 'Recorrente']];
-    incomes.forEach(i => rows.push([i.description, i.amount.toString(), i.date, i.category, i.received ? 'Recebido' : 'Pendente', i.recurring ? 'Sim' : 'Não']));
-    const csv = rows.map(r => r.join(',')).join('\n');
+    incomes.forEach(i => rows.push([i.description, i.amount.toString().replace('.', ','), i.date, i.category, i.received ? 'Recebido' : 'Pendente', i.recurring ? 'Sim' : 'Não']));
+    const csvContent = rows.map(r => r.join(';')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.href = url;
     a.download = 'receitas.csv';
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (

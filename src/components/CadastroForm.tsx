@@ -17,25 +17,75 @@ export default function Auth({ onLogin }: AuthProps) {
     e.preventDefault();
     setError('');
 
+    const emailNorm = form.email.trim().toLowerCase();
+    if (!emailNorm.includes('@')) return setError('E-mail inválido');
+    if (form.senha.length < 4) return setError('Senha muito curta (mínimo 4 caracteres)');
+
+    // Load registered users list
+    const rawUsers = localStorage.getItem('registeredUsers');
+    let users: Array<UserType & { senha?: string }> = rawUsers ? JSON.parse(rawUsers) : [];
+
+    // Seed legacy single user if present to prevent lockout
+    const legacyUserRaw = localStorage.getItem('financeFlowUser');
+    if (legacyUserRaw) {
+      try {
+        const legacyU = JSON.parse(legacyUserRaw);
+        if (legacyU && legacyU.email && !users.find(x => x.email.toLowerCase() === legacyU.email.toLowerCase())) {
+          users.push({ ...legacyU, senha: '123' });
+          localStorage.setItem('registeredUsers', JSON.stringify(users));
+        }
+      } catch (err) {}
+    }
+
     if (mode === 'register') {
       if (!form.nome.trim()) return setError('Nome é obrigatório');
       if (form.nome.trim().split(' ').length < 2) return setError('Digite nome e sobrenome');
+
+      const exists = users.find(u => u.email.toLowerCase() === emailNorm);
+      if (exists) {
+        return setError('Este e-mail já está cadastrado. Vá para a tela de Login.');
+      }
+
+      const newUser: UserType & { senha?: string } = {
+        id: Date.now().toString(),
+        nome: form.nome.trim(),
+        email: emailNorm,
+        celular: form.celular.trim() || '',
+        senha: form.senha,
+      };
+
+      users.push(newUser);
+      localStorage.setItem('registeredUsers', JSON.stringify(users));
+
+      const cleanUser: UserType = {
+        id: newUser.id,
+        nome: newUser.nome,
+        email: newUser.email,
+        celular: newUser.celular,
+      };
+      localStorage.setItem('financeFlowUser', JSON.stringify(cleanUser));
+      localStorage.setItem('userLoggedIn', 'true');
+      onLogin(cleanUser);
+    } else {
+      // Login mode
+      const userMatch = users.find(u => u.email.toLowerCase() === emailNorm);
+      if (!userMatch) {
+        return setError('Usuário não encontrado. Crie uma conta.');
+      }
+      if (userMatch.senha && userMatch.senha !== form.senha) {
+        return setError('E-mail ou senha incorretos.');
+      }
+
+      const cleanUser: UserType = {
+        id: userMatch.id,
+        nome: userMatch.nome,
+        email: userMatch.email,
+        celular: userMatch.celular,
+      };
+      localStorage.setItem('financeFlowUser', JSON.stringify(cleanUser));
+      localStorage.setItem('userLoggedIn', 'true');
+      onLogin(cleanUser);
     }
-
-    if (!form.email.includes('@')) return setError('E-mail inválido');
-    if (form.senha.length < 4) return setError('Senha muito curta (mínimo 4 caracteres)');
-
-    const userData: UserType = {
-      id: Date.now().toString(),
-      nome: form.nome || form.email.split('@')[0],
-      email: form.email,
-      celular: form.celular || '',
-    };
-
-    // Persist user
-    localStorage.setItem('financeFlowUser', JSON.stringify(userData));
-    localStorage.setItem('userLoggedIn', 'true');
-    onLogin(userData);
   };
 
   return (

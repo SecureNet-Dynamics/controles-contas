@@ -22,6 +22,112 @@ function lsSet(key: string, value: unknown) {
   } catch { /* quota exceeded */ }
 }
 
+// ── Mappers between TypeScript (camelCase) and Postgres (snake_case) ──────────
+
+function mapBillToDb(b: Bill, userId: string) {
+  return {
+    id: b.id,
+    user_id: userId,
+    name: b.name,
+    amount: b.amount,
+    due_date: b.dueDate,
+    paid: b.paid,
+    category: b.category,
+    description: b.description || null,
+    installments: b.installments || null,
+    current_installment: b.currentInstallment || null,
+    recurring: b.recurring || false,
+  };
+}
+
+function mapBillFromDb(row: any): Bill {
+  return {
+    id: row.id,
+    name: row.name,
+    amount: typeof row.amount === 'string' ? parseFloat(row.amount) : row.amount,
+    dueDate: row.due_date,
+    paid: row.paid,
+    category: row.category,
+    description: row.description || undefined,
+    installments: row.installments || undefined,
+    currentInstallment: row.current_installment || undefined,
+    recurring: row.recurring || false,
+  };
+}
+
+function mapIncomeToDb(i: Income, userId: string) {
+  return {
+    id: i.id,
+    user_id: userId,
+    description: i.description,
+    amount: i.amount,
+    date: i.date,
+    category: i.category,
+    received: i.received,
+    recurring: i.recurring,
+    recurring_period: i.recurringPeriod || null,
+  };
+}
+
+function mapIncomeFromDb(row: any): Income {
+  return {
+    id: row.id,
+    description: row.description,
+    amount: typeof row.amount === 'string' ? parseFloat(row.amount) : row.amount,
+    date: row.date,
+    category: row.category,
+    received: row.received,
+    recurring: row.recurring,
+    recurringPeriod: (row.recurring_period as Income['recurringPeriod']) || undefined,
+  };
+}
+
+function mapGoalToDb(g: Goal, userId: string) {
+  return {
+    id: g.id,
+    user_id: userId,
+    category: g.category,
+    limit_amount: g.limit,
+    period: g.period,
+    color: g.color || null,
+  };
+}
+
+function mapGoalFromDb(row: any): Goal {
+  return {
+    id: row.id,
+    category: row.category,
+    limit: typeof row.limit_amount === 'string' ? parseFloat(row.limit_amount) : row.limit_amount,
+    period: row.period,
+    color: row.color || undefined,
+  };
+}
+
+function mapReminderToDb(r: Reminder, userId: string) {
+  return {
+    id: r.id,
+    user_id: userId,
+    title: r.title,
+    description: r.description || null,
+    date: r.date,
+    time: r.time || null,
+    completed: r.completed,
+    bill_id: r.billId || null,
+  };
+}
+
+function mapReminderFromDb(row: any): Reminder {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || undefined,
+    date: row.date,
+    time: row.time || undefined,
+    completed: row.completed,
+    billId: row.bill_id || undefined,
+  };
+}
+
 // ── Bills ──────────────────────────────────────────────────────────────────
 
 export async function getBills(userId: string): Promise<Bill[]> {
@@ -31,7 +137,7 @@ export async function getBills(userId: string): Promise<Bill[]> {
       .select('*')
       .eq('user_id', userId)
       .order('due_date', { ascending: true });
-    if (!error && data) return data as Bill[];
+    if (!error && data) return data.map(mapBillFromDb);
   }
   return lsGet<Bill[]>('bills', []);
 }
@@ -39,9 +145,10 @@ export async function getBills(userId: string): Promise<Bill[]> {
 export async function saveBills(bills: Bill[], userId?: string): Promise<void> {
   lsSet('bills', bills);
   if (isSupabaseEnabled && supabase && userId) {
-    // Upsert all bills for this user
+    // Delete existing and bulk upsert
+    // To prevent orphans or duplication, standard Supabase upsert will match primary keys.
     await supabase.from('bills').upsert(
-      bills.map(b => ({ ...b, user_id: userId }))
+      bills.map(b => mapBillToDb(b, userId))
     );
   }
 }
@@ -55,7 +162,7 @@ export async function getIncomes(userId: string): Promise<Income[]> {
       .select('*')
       .eq('user_id', userId)
       .order('date', { ascending: false });
-    if (!error && data) return data as Income[];
+    if (!error && data) return data.map(mapIncomeFromDb);
   }
   return lsGet<Income[]>('incomes', []);
 }
@@ -64,7 +171,7 @@ export async function saveIncomes(incomes: Income[], userId?: string): Promise<v
   lsSet('incomes', incomes);
   if (isSupabaseEnabled && supabase && userId) {
     await supabase.from('incomes').upsert(
-      incomes.map(i => ({ ...i, user_id: userId }))
+      incomes.map(i => mapIncomeToDb(i, userId))
     );
   }
 }
@@ -77,7 +184,7 @@ export async function getGoals(userId: string): Promise<Goal[]> {
       .from('goals')
       .select('*')
       .eq('user_id', userId);
-    if (!error && data) return data as Goal[];
+    if (!error && data) return data.map(mapGoalFromDb);
   }
   return lsGet<Goal[]>('goals', []);
 }
@@ -86,7 +193,7 @@ export async function saveGoals(goals: Goal[], userId?: string): Promise<void> {
   lsSet('goals', goals);
   if (isSupabaseEnabled && supabase && userId) {
     await supabase.from('goals').upsert(
-      goals.map(g => ({ ...g, user_id: userId }))
+      goals.map(g => mapGoalToDb(g, userId))
     );
   }
 }
@@ -100,7 +207,7 @@ export async function getReminders(userId: string): Promise<Reminder[]> {
       .select('*')
       .eq('user_id', userId)
       .order('date', { ascending: true });
-    if (!error && data) return data as Reminder[];
+    if (!error && data) return data.map(mapReminderFromDb);
   }
   return lsGet<Reminder[]>('reminders', []);
 }
@@ -109,7 +216,7 @@ export async function saveReminders(reminders: Reminder[], userId?: string): Pro
   lsSet('reminders', reminders);
   if (isSupabaseEnabled && supabase && userId) {
     await supabase.from('reminders').upsert(
-      reminders.map(r => ({ ...r, user_id: userId }))
+      reminders.map(r => mapReminderToDb(r, userId))
     );
   }
 }

@@ -41,9 +41,12 @@ export default function Calendar({ reminders, setReminders, bills, addNotificati
   const billsForDay = (day: number) => bills.filter(b => b.dueDate === dateStr(day) && !b.paid);
 
   const monthReminders = reminders.filter(r => {
-    const d = new Date(r.date);
-    return d.getMonth() === month && d.getFullYear() === year;
-  }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const parts = r.date.split('-');
+    if (parts.length < 2) return false;
+    const yearPart = parseInt(parts[0], 10);
+    const monthPart = parseInt(parts[1], 10) - 1;
+    return monthPart === month && yearPart === year;
+  }).sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
 
   const addReminder = () => {
     if (!newReminder.title.trim()) return;

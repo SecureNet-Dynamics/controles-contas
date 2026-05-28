@@ -27,14 +27,21 @@ interface DashboardProps {
 const MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 function KpiCard({
-  label, value, sub, icon: Icon, color, editable, onEdit,
+  label, value, sub, icon: Icon, color, editable, onEdit, rawValue,
 }: {
   label: string; value: string; sub?: string;
   icon: React.ElementType; color: string; editable?: boolean;
-  onEdit?: (v: number) => void;
+  onEdit?: (v: number) => void; rawValue?: number;
 }) {
   const [editing, setEditing] = useState(false);
   const [raw, setRaw] = useState('');
+
+  const handleSave = () => {
+    if (raw.trim() !== '') {
+      onEdit?.(parseFormattedNumber(raw));
+    }
+    setEditing(false);
+  };
 
   return (
     <motion.div
@@ -56,19 +63,21 @@ function KpiCard({
           className="input text-lg font-bold py-1"
           value={raw}
           onChange={e => setRaw(formatInputCurrency(e.target.value))}
-          onBlur={() => {
-            onEdit?.(parseFormattedNumber(raw));
-            setEditing(false);
-          }}
+          onBlur={handleSave}
           onKeyDown={e => {
-            if (e.key === 'Enter') { onEdit?.(parseFormattedNumber(raw)); setEditing(false); }
+            if (e.key === 'Enter') handleSave();
             if (e.key === 'Escape') setEditing(false);
           }}
         />
       ) : (
         <button
           className={`text-left w-full ${editable ? 'cursor-text' : 'cursor-default'}`}
-          onClick={() => { if (editable) { setRaw(''); setEditing(true); } }}
+          onClick={() => {
+            if (editable) {
+              setRaw(formatInputCurrency(rawValue !== undefined ? rawValue.toString() : ''));
+              setEditing(true);
+            }
+          }}
         >
           <p className="text-xl font-bold text-ink">{value}</p>
           {sub && <p className="text-xs text-ink-muted mt-0.5">{sub}</p>}
@@ -142,16 +151,29 @@ export default function Dashboard({
   const [showModal, setShowModal] = useState(false);
 
   const today = new Date();
+  const todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const getDayDiff = (dueDateStr: string) => {
+    const parts = dueDateStr.split('-');
+    if (parts.length < 3) return 0;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const targetTime = new Date(y, m, d).getTime();
+    return (targetTime - todayTime) / 86400000;
+  };
+
   const totalBills = bills.reduce((s, b) => s + b.amount, 0);
   const totalPaid = bills.filter(b => b.paid).reduce((s, b) => s + b.amount, 0);
   const totalPending = totalBills - totalPaid;
-  const totalIncomeReceived = incomes.filter(i => i.received).reduce((s, i) => s + i.amount, 0);
-  const balance = availableMoney + totalIncomeReceived - totalPending;
 
-  const overdueBills = bills.filter(b => !b.paid && new Date(b.dueDate) < today);
+  // Correct contábil balance calculation avoiding double counting received items
+  const totalPendingIncome = incomes.filter(i => !i.received).reduce((s, i) => s + i.amount, 0);
+  const balance = availableMoney + totalPendingIncome - totalPending;
+
+  const overdueBills = bills.filter(b => !b.paid && getDayDiff(b.dueDate) < 0);
   const dueSoonBills = bills.filter(b => {
     if (b.paid) return false;
-    const diff = (new Date(b.dueDate).getTime() - today.getTime()) / 86400000;
+    const diff = getDayDiff(b.dueDate);
     return diff >= 0 && diff <= 7;
   });
 
@@ -159,12 +181,18 @@ export default function Dashboard({
   const monthlyData = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(today.getFullYear(), today.getMonth() - (5 - i), 1);
     const monthBills = bills.filter(b => {
-      const bd = new Date(b.dueDate);
-      return bd.getMonth() === d.getMonth() && bd.getFullYear() === d.getFullYear();
+      const parts = b.dueDate.split('-');
+      if (parts.length < 2) return false;
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      return month === d.getMonth() && year === d.getFullYear();
     });
     const monthIncome = incomes.filter(inc => {
-      const id = new Date(inc.date);
-      return id.getMonth() === d.getMonth() && id.getFullYear() === d.getFullYear() && inc.received;
+      const parts = inc.date.split('-');
+      if (parts.length < 2) return false;
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      return month === d.getMonth() && year === d.getFullYear() && inc.received;
     });
     return {
       month: MONTHS[d.getMonth()],
@@ -219,7 +247,7 @@ export default function Dashboard({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard label="Saldo Disponível" value={formatCurrency(availableMoney)}
           sub="Clique para atualizar" icon={Wallet} color="#22D68A"
-          editable onEdit={onMoneyChange} />
+          editable onEdit={onMoneyChange} rawValue={availableMoney} />
         <KpiCard label="Total em Contas" value={formatCurrency(totalBills)}
           sub={`${bills.length} conta${bills.length !== 1 ? 's' : ''}`} icon={AlertCircle} color="#4F8EF7" />
         <KpiCard label="Já Pago" value={formatCurrency(totalPaid)}
@@ -242,7 +270,7 @@ export default function Dashboard({
                 tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
               <Tooltip
                 contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12 }}
-                formatter={(v: number) => formatCurrency(v)}
+                formatter={(v: any) => formatCurrency(Number(v || 0))}
               />
               <Bar dataKey="receitas" fill="#22D68A" radius={[4, 4, 0, 0]} name="Receitas" />
               <Bar dataKey="despesas" fill="#4F8EF7" radius={[4, 4, 0, 0]} name="Despesas" />
@@ -262,7 +290,7 @@ export default function Dashboard({
                     <Cell key={i} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => formatCurrency(v)}
+                <Tooltip formatter={(v: any) => formatCurrency(Number(v || 0))}
                   contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12 }} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }}
                   formatter={(v) => <span style={{ fontSize: 11, color: '#6B6B88' }}>{v}</span>} />

@@ -22,17 +22,24 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
   const [period, setPeriod] = useState<Period>('6m');
   const today = new Date();
 
+  const todayStr = today.toISOString().split('T')[0];
   const months = period === '3m' ? 3 : period === '6m' ? 6 : 12;
 
   const monthlyData = Array.from({ length: months }, (_, i) => {
     const d = new Date(today.getFullYear(), today.getMonth() - (months - 1 - i), 1);
     const monthBills = bills.filter(b => {
-      const bd = new Date(b.dueDate);
-      return bd.getMonth() === d.getMonth() && bd.getFullYear() === d.getFullYear();
+      const parts = b.dueDate.split('-');
+      if (parts.length < 2) return false;
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      return month === d.getMonth() && year === d.getFullYear();
     });
     const monthIncome = incomes.filter(inc => {
-      const id = new Date(inc.date);
-      return id.getMonth() === d.getMonth() && id.getFullYear() === d.getFullYear() && inc.received;
+      const parts = inc.date.split('-');
+      if (parts.length < 2) return false;
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      return month === d.getMonth() && year === d.getFullYear() && inc.received;
     });
     const despesas = monthBills.reduce((s, b) => s + b.amount, 0);
     const receitas = monthIncome.reduce((s, inc) => s + inc.amount, 0);
@@ -63,7 +70,7 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
     ? Math.max(0, ((totalIncomeReceived - totalBills) / totalIncomeReceived) * 100)
     : 0;
   const onTimeRate = bills.length > 0
-    ? (bills.filter(b => b.paid && new Date(b.dueDate) >= new Date()).length / bills.length) * 100
+    ? (bills.filter(b => b.paid && b.dueDate >= todayStr).length / bills.length) * 100
     : 0;
 
   const exportReport = () => {
@@ -79,11 +86,14 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
       ['Despesas por Categoria'],
       ...categoryData.map(c => [c.name, formatCurrency(c.value), `${((c.value / totalBills) * 100).toFixed(1)}%`]),
     ];
-    const csv = rows.map(r => r.join(',')).join('\n');
+    const csvContent = rows.map(r => r.join(';')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.href = url;
     a.download = 'relatorio-financeiro.csv';
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -155,7 +165,7 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
             <YAxis tick={{ fontSize: 11, fill: '#6B6B88' }} axisLine={false} tickLine={false}
               tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
             <Tooltip contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12 }}
-              formatter={(v: number) => formatCurrency(v)} />
+              formatter={(v: any) => formatCurrency(Number(v || 0))} />
             <Area type="monotone" dataKey="receitas" stroke="#22D68A" fill="url(#colorReceitas)" strokeWidth={2} name="Receitas" />
             <Area type="monotone" dataKey="despesas" stroke="#4F8EF7" fill="url(#colorDespesas)" strokeWidth={2} name="Despesas" />
           </AreaChart>
@@ -173,11 +183,11 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
               <YAxis tick={{ fontSize: 11, fill: '#6B6B88' }} axisLine={false} tickLine={false}
                 tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
               <Tooltip contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12 }}
-                formatter={(v: number) => formatCurrency(v)} />
+                formatter={(v: any) => formatCurrency(Number(v || 0))} />
               <Bar dataKey="economia" radius={[4, 4, 0, 0]} name="Economia"
                 fill="#22D68A"
                 label={{ position: 'top', fontSize: 10, fill: '#6B6B88',
-                  formatter: (v: number) => v !== 0 ? formatCurrency(v) : '' }} />
+                  formatter: (v: any) => v !== 0 && v !== undefined ? formatCurrency(Number(v)) : '' }} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -194,7 +204,7 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
                     <Cell key={i} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => formatCurrency(v)}
+                <Tooltip formatter={(v: any) => formatCurrency(Number(v || 0))}
                   contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12 }} />
                 <Legend iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle"
                   formatter={(v) => <span style={{ fontSize: 11, color: '#6B6B88' }}>{v}</span>} />

@@ -14,6 +14,21 @@ import Settings from './components/Settings';
 import Auth from './components/CadastroForm';
 
 import type { Bill, Income, Goal, Reminder, Notification, FutureTransaction, User } from './types';
+import { isSupabaseEnabled } from './lib/supabase';
+import {
+  getBills,
+  saveBills,
+  getIncomes,
+  saveIncomes,
+  getGoals,
+  saveGoals,
+  getReminders,
+  saveReminders,
+  getNotifications,
+  saveNotifications,
+  getFutureTransactions,
+  saveFutureTransactions,
+} from './lib/db';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -29,7 +44,36 @@ export default function App() {
   const [futureTransactions, setFutureTransactions] = useState<FutureTransaction[]>([]);
   const [availableMoney, setAvailableMoney] = useState<number>(0);
 
-  // ── Load from localStorage ─────────────────────────────────────────────
+  // Custom wrapper setters to automatically adjust availableMoney cashflow contábil-style
+  const setBillsAndDeduct = useCallback((action: React.SetStateAction<Bill[]>) => {
+    setBills(prev => {
+      const next = typeof action === 'function' ? action(prev) : action;
+      prev.forEach(pBill => {
+        const nBill = next.find(n => n.id === pBill.id);
+        if (nBill && pBill.paid !== nBill.paid) {
+          const diff = nBill.paid ? -nBill.amount : nBill.amount;
+          setAvailableMoney(m => parseFloat((m + diff).toFixed(2)));
+        }
+      });
+      return next;
+    });
+  }, []);
+
+  const setIncomesAndAdd = useCallback((action: React.SetStateAction<Income[]>) => {
+    setIncomes(prev => {
+      const next = typeof action === 'function' ? action(prev) : action;
+      prev.forEach(pIncome => {
+        const nIncome = next.find(n => n.id === pIncome.id);
+        if (nIncome && pIncome.received !== nIncome.received) {
+          const diff = nIncome.received ? nIncome.amount : -nIncome.amount;
+          setAvailableMoney(m => parseFloat((m + diff).toFixed(2)));
+        }
+      });
+      return next;
+    });
+  }, []);
+
+  // ── Load from localStorage and Cloud ─────────────────────────────────────────────
   useEffect(() => {
     setIsClient(true);
     try {
@@ -41,6 +85,7 @@ export default function App() {
       const savedUser = ls('financeFlowUser');
       const loggedIn = localStorage.getItem('userLoggedIn') === 'true';
 
+      // Load local storage cache immediately for fast render
       if (savedUser && loggedIn) setUser(savedUser);
 
       setBills(ls('bills') ?? []);
@@ -50,6 +95,14 @@ export default function App() {
       setNotifications(ls('notifications') ?? []);
       setFutureTransactions(ls('futureTransactions') ?? []);
       setAvailableMoney(parseFloat(localStorage.getItem('availableMoney') ?? '0') || 0);
+
+      // Async fetch from Supabase if user is logged in
+      if (savedUser && loggedIn && isSupabaseEnabled) {
+        getBills(savedUser.id).then(setBills).catch(console.error);
+        getIncomes(savedUser.id).then(setIncomes).catch(console.error);
+        getGoals(savedUser.id).then(setGoals).catch(console.error);
+        getReminders(savedUser.id).then(setReminders).catch(console.error);
+      }
     } catch (e) {
       console.error('Error loading from localStorage:', e);
     } finally {
@@ -57,13 +110,13 @@ export default function App() {
     }
   }, []);
 
-  // ── Persist to localStorage ────────────────────────────────────────────
-  useEffect(() => { if (isClient) localStorage.setItem('bills', JSON.stringify(bills)); }, [bills, isClient]);
-  useEffect(() => { if (isClient) localStorage.setItem('incomes', JSON.stringify(incomes)); }, [incomes, isClient]);
-  useEffect(() => { if (isClient) localStorage.setItem('goals', JSON.stringify(goals)); }, [goals, isClient]);
-  useEffect(() => { if (isClient) localStorage.setItem('reminders', JSON.stringify(reminders)); }, [reminders, isClient]);
-  useEffect(() => { if (isClient) localStorage.setItem('notifications', JSON.stringify(notifications)); }, [notifications, isClient]);
-  useEffect(() => { if (isClient) localStorage.setItem('futureTransactions', JSON.stringify(futureTransactions)); }, [futureTransactions, isClient]);
+  // ── Persist to localStorage and Cloud ────────────────────────────────────────────
+  useEffect(() => { if (isClient) saveBills(bills, user?.id); }, [bills, isClient, user?.id]);
+  useEffect(() => { if (isClient) saveIncomes(incomes, user?.id); }, [incomes, isClient, user?.id]);
+  useEffect(() => { if (isClient) saveGoals(goals, user?.id); }, [goals, isClient, user?.id]);
+  useEffect(() => { if (isClient) saveReminders(reminders, user?.id); }, [reminders, isClient, user?.id]);
+  useEffect(() => { if (isClient) saveNotifications(notifications); }, [notifications, isClient]);
+  useEffect(() => { if (isClient) saveFutureTransactions(futureTransactions); }, [futureTransactions, isClient]);
   useEffect(() => { if (isClient) localStorage.setItem('availableMoney', availableMoney.toString()); }, [availableMoney, isClient]);
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -82,6 +135,14 @@ export default function App() {
       date: new Date().toISOString(),
       type: 'system',
     });
+
+    // Cloud pull on explicit login
+    if (isSupabaseEnabled) {
+      getBills(userData.id).then(setBills).catch(console.error);
+      getIncomes(userData.id).then(setIncomes).catch(console.error);
+      getGoals(userData.id).then(setGoals).catch(console.error);
+      getReminders(userData.id).then(setReminders).catch(console.error);
+    }
   };
 
   const handleLogout = () => {
@@ -124,20 +185,17 @@ export default function App() {
             />
           </motion.div>
         )}
-
         {activeSection === 'bills' && (
           <motion.div key="bills" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <BillsManager bills={bills} setBills={setBills} addNotification={addNotification} />
+            <BillsManager bills={bills} setBills={setBillsAndDeduct} addNotification={addNotification} />
           </motion.div>
         )}
 
         {activeSection === 'income' && (
           <motion.div key="income" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <IncomeManager incomes={incomes} setIncomes={setIncomes} addNotification={addNotification} />
+            <IncomeManager incomes={incomes} setIncomes={setIncomesAndAdd} addNotification={addNotification} />
           </motion.div>
-        )}
-
-        {activeSection === 'analytics' && (
+        )}        {activeSection === 'analytics' && (
           <motion.div key="analytics" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <Analytics bills={bills} incomes={incomes} />
           </motion.div>

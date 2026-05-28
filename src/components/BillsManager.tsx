@@ -161,10 +161,63 @@ export default function BillsManager({ bills, setBills, addNotification }: Bills
     else { setSort(s); setSortDir('asc'); }
   };
 
+  const addMonthsToDateStr = (dateStr: string, monthsToAdd: number) => {
+    const parts = dateStr.split('-');
+    if (parts.length < 3) return dateStr;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const d = parseInt(parts[2], 10);
+    const date = new Date(y, m - 1 + monthsToAdd, d);
+    const newY = date.getFullYear();
+    const newM = (date.getMonth() + 1).toString().padStart(2, '0');
+    const newD = date.getDate().toString().padStart(2, '0');
+    return `${newY}-${newM}-${newD}`;
+  };
+
   const handleAdd = (data: Omit<Bill, 'id' | 'paid'>) => {
-    const newBill: Bill = { ...data, id: Date.now().toString(), paid: false };
-    setBills(prev => [...prev, newBill]);
-    addNotification({ title: 'Conta adicionada', message: `${data.name}: ${formatCurrency(data.amount)}`, date: new Date().toISOString(), type: 'bill' });
+    const newBills: Bill[] = [];
+    const installmentsCount = data.installments || 1;
+
+    if (installmentsCount > 1) {
+      for (let i = 0; i < installmentsCount; i++) {
+        const dueDate = addMonthsToDateStr(data.dueDate, i);
+        newBills.push({
+          ...data,
+          id: `${Date.now()}-${i}`,
+          name: `${data.name} (${i + 1}/${installmentsCount})`,
+          dueDate,
+          paid: false,
+          currentInstallment: i + 1,
+          installments: installmentsCount,
+        });
+      }
+    } else if (data.recurring) {
+      // Pre-generate 6 months of recurring bills for projection
+      for (let i = 0; i < 6; i++) {
+        const dueDate = addMonthsToDateStr(data.dueDate, i);
+        newBills.push({
+          ...data,
+          id: `${Date.now()}-rec-${i}`,
+          name: data.name,
+          dueDate,
+          paid: false,
+        });
+      }
+    } else {
+      newBills.push({
+        ...data,
+        id: Date.now().toString(),
+        paid: false,
+      });
+    }
+
+    setBills(prev => [...prev, ...newBills]);
+    addNotification({
+      title: installmentsCount > 1 ? `${installmentsCount} parcelas adicionadas` : 'Conta adicionada',
+      message: `${data.name}: ${formatCurrency(data.amount)}`,
+      date: new Date().toISOString(),
+      type: 'bill',
+    });
   };
 
   const handleTogglePaid = (id: string) => {
@@ -189,12 +242,15 @@ export default function BillsManager({ bills, setBills, addNotification }: Bills
 
   const exportCsv = () => {
     const rows = [['Nome', 'Valor', 'Vencimento', 'Categoria', 'Status']];
-    bills.forEach(b => rows.push([b.name, b.amount.toString(), b.dueDate, b.category, b.paid ? 'Pago' : 'Pendente']));
-    const csv = rows.map(r => r.join(',')).join('\n');
+    bills.forEach(b => rows.push([b.name, b.amount.toString().replace('.', ','), b.dueDate, b.category, b.paid ? 'Pago' : 'Pendente']));
+    const csvContent = rows.map(r => r.join(';')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.href = url;
     a.download = 'contas.csv';
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   const stats = {
