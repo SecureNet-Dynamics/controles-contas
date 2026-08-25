@@ -1,8 +1,9 @@
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Receipt, BarChart3, CalendarDays,
   Bell, Settings, TrendingUp, Target, Landmark,
-  ChevronLeft, ChevronRight, Wallet, X
+  ChevronLeft, ChevronRight, Wallet, X, LogOut
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -14,6 +15,7 @@ interface SidebarProps {
   onMobileClose: () => void;
   notificationCount: number;
   userName: string;
+  onLogout: () => void;
 }
 
 const navItems = [
@@ -76,7 +78,22 @@ export default function Sidebar({
   onMobileClose,
   notificationCount,
   userName,
+  onLogout,
 }: SidebarProps) {
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [userMenuOpen]);
+
   const initials = userName
     .split(' ')
     .slice(0, 2)
@@ -84,25 +101,42 @@ export default function Sidebar({
     .join('')
     .toUpperCase();
 
-  const sidebarContent = (
+  const sidebarContent = (isMobile: boolean) => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className={`flex items-center gap-3 px-4 py-5 ${collapsed ? 'justify-center px-2' : ''}`}>
-        <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center flex-shrink-0">
-          <Wallet size={16} className="text-white" />
-        </div>
-        {!collapsed && (
-          <div>
-            <span className="text-white font-bold text-base leading-tight">FinanceFlow</span>
-            <span className="block text-[10px] text-sidebar-text leading-tight">Pro</span>
+      {/* Top bar: brand + collapse toggle */}
+      <div className={`flex items-center gap-2 p-3 ${collapsed ? 'justify-center' : 'justify-between'}`}>
+        <div className={`flex items-center gap-2.5 min-w-0 ${collapsed ? 'justify-center' : ''}`}>
+          <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center flex-shrink-0">
+            <Wallet size={16} className="text-white" />
           </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <span className="text-white font-bold text-sm leading-tight block truncate">FinanceFlow</span>
+              <span className="block text-[10px] text-sidebar-text leading-tight">Pro</span>
+            </div>
+          )}
+        </div>
+        {!collapsed && !isMobile && (
+          <button
+            onClick={onToggleCollapse}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active transition-colors flex-shrink-0"
+          >
+            <ChevronLeft size={14} />
+          </button>
         )}
       </div>
 
-      <div className="sidebar-divider" />
+      {collapsed && !isMobile && (
+        <button
+          onClick={onToggleCollapse}
+          className="mx-auto mb-1 w-7 h-7 rounded-lg flex items-center justify-center text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active transition-colors flex-shrink-0"
+        >
+          <ChevronRight size={14} />
+        </button>
+      )}
 
       {/* Main nav */}
-      <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-2.5 py-2 space-y-1 overflow-y-auto">
         {navItems.map(item => (
           <NavItem
             key={item.id}
@@ -114,10 +148,10 @@ export default function Sidebar({
         ))}
       </nav>
 
-      <div className="sidebar-divider" />
+      <div className="sidebar-divider mx-2.5" />
 
       {/* Bottom nav */}
-      <nav className="px-2 py-2 space-y-0.5">
+      <nav className="px-2.5 py-2 space-y-1">
         {bottomItems.map(item => (
           <NavItem
             key={item.id}
@@ -130,39 +164,59 @@ export default function Sidebar({
         ))}
       </nav>
 
-      <div className="sidebar-divider" />
+      <div className="sidebar-divider mx-2.5" />
 
-      {/* User + collapse toggle */}
-      <div className={`px-2 py-3 flex items-center gap-3 ${collapsed ? 'justify-center' : 'justify-between'}`}>
-        {!collapsed && (
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">{initials}</span>
-            </div>
-            <span className="text-sidebar-text text-xs truncate">{userName}</span>
-          </div>
-        )}
+      {/* User */}
+      <div className="px-2.5 pb-2.5" ref={userMenuRef}>
         <button
-          onClick={onToggleCollapse}
-          className="w-7 h-7 rounded-lg flex items-center justify-center text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active transition-colors flex-shrink-0"
+          onClick={() => setUserMenuOpen(v => !v)}
+          title={collapsed ? userName : undefined}
+          className={`w-full flex items-center gap-2.5 py-2 rounded-lg hover:bg-white/5 transition-colors ${collapsed ? 'justify-center' : ''}`}
         >
-          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center flex-shrink-0">
+            <span className="text-white text-xs font-bold">{initials}</span>
+          </div>
+          {!collapsed && (
+            <span className="text-sidebar-text text-xs truncate flex-1 text-left">{userName}</span>
+          )}
         </button>
+
+        <AnimatePresence>
+          {userMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.15 }}
+              className="overflow-hidden"
+            >
+              <button
+                onClick={onLogout}
+                title={collapsed ? 'Sair do sistema' : undefined}
+                className={`w-full flex items-center gap-2.5 mt-1 px-3 py-2.5 rounded-lg text-sm text-danger hover:bg-danger/10 transition-colors ${collapsed ? 'justify-center px-0' : ''}`}
+              >
+                <LogOut size={14} className="flex-shrink-0" />
+                {!collapsed && <span>Sair do sistema</span>}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <motion.aside
-        animate={{ width: collapsed ? 64 : 220 }}
-        transition={{ duration: 0.2, ease: 'easeInOut' }}
-        className="hidden md:flex flex-col h-screen sticky top-0 flex-shrink-0 overflow-hidden"
-        style={{ background: '#1C1C28' }}
-      >
-        {sidebarContent}
-      </motion.aside>
+      {/* Desktop sidebar — floating card */}
+      <div className="hidden md:flex p-3 h-screen sticky top-0 flex-shrink-0">
+        <motion.aside
+          animate={{ width: collapsed ? 68 : 224 }}
+          transition={{ duration: 0.2, ease: 'easeInOut' }}
+          className="flex flex-col h-full overflow-hidden bg-sidebar border border-sidebar-border rounded-2xl shadow-modal"
+        >
+          {sidebarContent(false)}
+        </motion.aside>
+      </div>
 
       {/* Mobile overlay */}
       <AnimatePresence>
@@ -180,8 +234,7 @@ export default function Sidebar({
               animate={{ x: 0 }}
               exit={{ x: -240 }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="fixed left-0 top-0 bottom-0 w-60 z-50 md:hidden flex flex-col"
-              style={{ background: '#1C1C28' }}
+              className="fixed left-0 top-0 bottom-0 w-60 z-50 md:hidden flex flex-col bg-sidebar border-r border-sidebar-border"
             >
               <button
                 onClick={onMobileClose}
@@ -189,7 +242,7 @@ export default function Sidebar({
               >
                 <X size={18} />
               </button>
-              {sidebarContent}
+              {sidebarContent(true)}
             </motion.aside>
           </>
         )}

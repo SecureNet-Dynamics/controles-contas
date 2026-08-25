@@ -3,7 +3,7 @@
  * Uses Supabase when env vars are configured, otherwise falls back to localStorage.
  */
 import { supabase, isSupabaseEnabled } from './supabase';
-import type { Bill, Income, Goal, Reminder, Notification, FutureTransaction, User } from '../types';
+import type { Bill, Income, Goal, Reminder, Notification, FutureTransaction } from '../types';
 
 // ── Local Storage helpers ──────────────────────────────────────────────────
 
@@ -22,6 +22,16 @@ function lsSet(key: string, value: unknown) {
   } catch { /* quota exceeded */ }
 }
 
+// Evita que uma consulta ao Supabase deixe a tela travada para sempre (ex.:
+// perda de conexão) — depois do prazo, cai para o cache local em vez de
+// ficar esperando indefinidamente.
+function withTimeout<T>(promise: PromiseLike<T>, ms = 8000): Promise<T | null> {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<null>(resolve => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 // ── Mappers between TypeScript (camelCase) and Postgres (snake_case) ──────────
 
 function mapBillToDb(b: Bill, userId: string) {
@@ -32,6 +42,7 @@ function mapBillToDb(b: Bill, userId: string) {
     amount: b.amount,
     due_date: b.dueDate,
     paid: b.paid,
+    paid_at: b.paidAt || null,
     category: b.category,
     description: b.description || null,
     installments: b.installments || null,
@@ -47,6 +58,7 @@ function mapBillFromDb(row: any): Bill {
     amount: typeof row.amount === 'string' ? parseFloat(row.amount) : row.amount,
     dueDate: row.due_date,
     paid: row.paid,
+    paidAt: row.paid_at || undefined,
     category: row.category,
     description: row.description || undefined,
     installments: row.installments || undefined,
@@ -87,7 +99,7 @@ function mapGoalToDb(g: Goal, userId: string) {
     id: g.id,
     user_id: userId,
     category: g.category,
-    limit_amount: g.limit,
+    limit_amount: g.limitAmount,
     period: g.period,
     color: g.color || null,
   };
@@ -97,7 +109,7 @@ function mapGoalFromDb(row: any): Goal {
   return {
     id: row.id,
     category: row.category,
-    limit: typeof row.limit_amount === 'string' ? parseFloat(row.limit_amount) : row.limit_amount,
+    limitAmount: typeof row.limit_amount === 'string' ? parseFloat(row.limit_amount) : row.limit_amount,
     period: row.period,
     color: row.color || undefined,
   };
@@ -132,12 +144,12 @@ function mapReminderFromDb(row: any): Reminder {
 
 export async function getBills(userId: string): Promise<Bill[]> {
   if (isSupabaseEnabled && supabase) {
-    const { data, error } = await supabase
+    const result = await withTimeout(supabase
       .from('bills')
       .select('*')
       .eq('user_id', userId)
-      .order('due_date', { ascending: true });
-    if (!error && data) return data.map(mapBillFromDb);
+      .order('due_date', { ascending: true }));
+    if (result && !result.error && result.data) return result.data.map(mapBillFromDb);
   }
   return lsGet<Bill[]>('bills', []);
 }
@@ -157,12 +169,12 @@ export async function saveBills(bills: Bill[], userId?: string): Promise<void> {
 
 export async function getIncomes(userId: string): Promise<Income[]> {
   if (isSupabaseEnabled && supabase) {
-    const { data, error } = await supabase
+    const result = await withTimeout(supabase
       .from('incomes')
       .select('*')
       .eq('user_id', userId)
-      .order('date', { ascending: false });
-    if (!error && data) return data.map(mapIncomeFromDb);
+      .order('date', { ascending: false }));
+    if (result && !result.error && result.data) return result.data.map(mapIncomeFromDb);
   }
   return lsGet<Income[]>('incomes', []);
 }
@@ -180,11 +192,11 @@ export async function saveIncomes(incomes: Income[], userId?: string): Promise<v
 
 export async function getGoals(userId: string): Promise<Goal[]> {
   if (isSupabaseEnabled && supabase) {
-    const { data, error } = await supabase
+    const result = await withTimeout(supabase
       .from('goals')
       .select('*')
-      .eq('user_id', userId);
-    if (!error && data) return data.map(mapGoalFromDb);
+      .eq('user_id', userId));
+    if (result && !result.error && result.data) return result.data.map(mapGoalFromDb);
   }
   return lsGet<Goal[]>('goals', []);
 }
@@ -202,12 +214,12 @@ export async function saveGoals(goals: Goal[], userId?: string): Promise<void> {
 
 export async function getReminders(userId: string): Promise<Reminder[]> {
   if (isSupabaseEnabled && supabase) {
-    const { data, error } = await supabase
+    const result = await withTimeout(supabase
       .from('reminders')
       .select('*')
       .eq('user_id', userId)
-      .order('date', { ascending: true });
-    if (!error && data) return data.map(mapReminderFromDb);
+      .order('date', { ascending: true }));
+    if (result && !result.error && result.data) return result.data.map(mapReminderFromDb);
   }
   return lsGet<Reminder[]>('reminders', []);
 }
@@ -221,40 +233,82 @@ export async function saveReminders(reminders: Reminder[], userId?: string): Pro
   }
 }
 
-// ── User preferences ──────────────────────────────────────────────────────
+// ── Available money (saldo atual) ───────────────────────────────────────────
 
-export function getUserPrefs(): { availableMoney: number; darkMode: boolean } {
-  return {
-    availableMoney: parseFloat(localStorage.getItem('availableMoney') ?? '0') || 0,
-    darkMode: JSON.parse(localStorage.getItem('darkMode') ?? 'false'),
-  };
+export async function getAvailableMoney(userId?: string): Promise<number> {
+  if (isSupabaseEnabled && supabase && userId) {
+    const result = await withTimeout(supabase
+      .from('user_prefs')
+      .select('available_money')
+      .eq('user_id', userId)
+      .maybeSingle());
+    if (result && !result.error && result.data) {
+      return typeof result.data.available_money === 'string'
+        ? parseFloat(result.data.available_money)
+        : result.data.available_money;
+    }
+  }
+  return parseFloat(localStorage.getItem('availableMoney') ?? '0') || 0;
 }
 
-export function saveUserPrefs(prefs: { availableMoney?: number; darkMode?: boolean }) {
-  if (prefs.availableMoney !== undefined)
-    localStorage.setItem('availableMoney', prefs.availableMoney.toString());
-  if (prefs.darkMode !== undefined)
-    localStorage.setItem('darkMode', JSON.stringify(prefs.darkMode));
+export async function saveAvailableMoney(value: number, userId?: string): Promise<void> {
+  localStorage.setItem('availableMoney', value.toString());
+  if (isSupabaseEnabled && supabase && userId) {
+    await supabase.from('user_prefs').upsert({
+      user_id: userId,
+      available_money: value,
+      updated_at: new Date().toISOString(),
+    });
+  }
 }
 
-// Re-export simple localStorage wrappers for notifications & future transactions
+// ── Notifications (local only) ──────────────────────────────────────────────
+
 export function getNotifications(): Notification[] {
   return lsGet<Notification[]>('notifications', []);
 }
 export function saveNotifications(n: Notification[]) { lsSet('notifications', n); }
 
-export function getFutureTransactions(): FutureTransaction[] {
-  return lsGet<FutureTransaction[]>('futureTransactions', []);
-}
-export function saveFutureTransactions(t: FutureTransaction[]) {
-  lsSet('futureTransactions', t);
+// ── Future transactions (entradas previstas) ────────────────────────────────
+
+function mapFutureTransactionToDb(t: FutureTransaction, userId: string) {
+  return {
+    id: t.id,
+    user_id: userId,
+    description: t.description,
+    amount: t.amount,
+    expected_date: t.expectedDate,
+    received: t.received,
+  };
 }
 
-export function getSavedUser(): User | null {
-  return lsGet<User | null>('financeFlowUser', null);
+function mapFutureTransactionFromDb(row: any): FutureTransaction {
+  return {
+    id: row.id,
+    description: row.description,
+    amount: typeof row.amount === 'string' ? parseFloat(row.amount) : row.amount,
+    expectedDate: row.expected_date,
+    received: row.received,
+  };
 }
-export function saveUser(u: User) { lsSet('financeFlowUser', u); }
-export function clearUser() {
-  localStorage.removeItem('financeFlowUser');
-  localStorage.removeItem('userLoggedIn');
+
+export async function getFutureTransactions(userId?: string): Promise<FutureTransaction[]> {
+  if (isSupabaseEnabled && supabase && userId) {
+    const result = await withTimeout(supabase
+      .from('future_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('expected_date', { ascending: true }));
+    if (result && !result.error && result.data) return result.data.map(mapFutureTransactionFromDb);
+  }
+  return lsGet<FutureTransaction[]>('futureTransactions', []);
+}
+
+export async function saveFutureTransactions(t: FutureTransaction[], userId?: string): Promise<void> {
+  lsSet('futureTransactions', t);
+  if (isSupabaseEnabled && supabase && userId) {
+    await supabase.from('future_transactions').upsert(
+      t.map(item => mapFutureTransactionToDb(item, userId))
+    );
+  }
 }

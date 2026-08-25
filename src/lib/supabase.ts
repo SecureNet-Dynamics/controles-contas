@@ -8,3 +8,4 @@ export const supabase = supabaseUrl && supabaseAnonKey
   : null;
 
 export const isSupabaseEnabled = !!(supabaseUrl && supabaseAnonKey);
+export { supabaseUrl };

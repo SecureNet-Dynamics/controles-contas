@@ -1,3 +1,5 @@
+import { getCustomCategories, getCustomIncomeCategories } from './lib/categories';
+
 export interface User {
   id: string;
   nome: string;
@@ -11,6 +13,7 @@ export interface Bill {
   amount: number;
   dueDate: string;
   paid: boolean;
+  paidAt?: string;
   category: string;
   description?: string;
   installments?: number;
@@ -54,6 +57,7 @@ export interface Notification {
   date: string;
   read: boolean;
   type: 'bill' | 'reminder' | 'system' | 'income';
+  billId?: string;
 }
 
 export interface FutureTransaction {
@@ -65,22 +69,22 @@ export interface FutureTransaction {
 }
 
 export const CATEGORIES = [
-  { value: 'moradia', label: 'Moradia', color: '#4F8EF7', emoji: '🏠' },
-  { value: 'alimentacao', label: 'Alimentação', color: '#8B5CF6', emoji: '🍔' },
-  { value: 'transporte', label: 'Transporte', color: '#06B6D4', emoji: '🚗' },
-  { value: 'saude', label: 'Saúde', color: '#22D68A', emoji: '💊' },
-  { value: 'educacao', label: 'Educação', color: '#F59E0B', emoji: '📚' },
+  { value: 'moradia', label: 'Moradia', color: '#4C97D6', emoji: '🏠' },
+  { value: 'alimentacao', label: 'Alimentação', color: '#A78BFA', emoji: '🍔' },
+  { value: 'transporte', label: 'Transporte', color: '#38BDF8', emoji: '🚗' },
+  { value: 'saude', label: 'Saúde', color: '#FF8A80', emoji: '💊' },
+  { value: 'educacao', label: 'Educação', color: '#F5A623', emoji: '📚' },
   { value: 'lazer', label: 'Lazer', color: '#F06292', emoji: '🎮' },
   { value: 'assinaturas', label: 'Assinaturas', color: '#EC4899', emoji: '📱' },
-  { value: 'investimentos', label: 'Investimentos', color: '#10B981', emoji: '📈' },
+  { value: 'investimentos', label: 'Investimentos', color: '#7C83FD', emoji: '📈' },
   { value: 'outros', label: 'Outros', color: '#9CA3AF', emoji: '📦' },
 ] as const;
 
 export const INCOME_CATEGORIES = [
-  { value: 'salario', label: 'Salário', color: '#22D68A', emoji: '💼' },
-  { value: 'freelance', label: 'Freelance', color: '#4F8EF7', emoji: '💻' },
-  { value: 'investimento', label: 'Investimento', color: '#8B5CF6', emoji: '📈' },
-  { value: 'aluguel', label: 'Aluguel', color: '#F59E0B', emoji: '🏘️' },
+  { value: 'salario', label: 'Salário', color: '#4C97D6', emoji: '💼' },
+  { value: 'freelance', label: 'Freelance', color: '#38BDF8', emoji: '💻' },
+  { value: 'investimento', label: 'Investimento', color: '#7C83FD', emoji: '📈' },
+  { value: 'aluguel', label: 'Aluguel', color: '#F5A623', emoji: '🏘️' },
   { value: 'bonus', label: 'Bônus', color: '#F06292', emoji: '🎁' },
   { value: 'outros', label: 'Outros', color: '#9CA3AF', emoji: '💰' },
 ] as const;
@@ -88,9 +92,17 @@ export const INCOME_CATEGORIES = [
 export type CategoryValue = typeof CATEGORIES[number]['value'];
 
 export function getCategoryInfo(value: string) {
-  return CATEGORIES.find(c => c.value === value) ?? CATEGORIES[CATEGORIES.length - 1];
+  const builtin = CATEGORIES.find(c => c.value === value);
+  if (builtin) return builtin;
+  const custom = getCustomCategories().find(c => c.value === value);
+  if (custom) return custom;
+  return CATEGORIES[CATEGORIES.length - 1];
 }
 
 export function getIncomeCategoryInfo(value: string) {
-  return INCOME_CATEGORIES.find(c => c.value === value) ?? INCOME_CATEGORIES[INCOME_CATEGORIES.length - 1];
+  const builtin = INCOME_CATEGORIES.find(c => c.value === value);
+  if (builtin) return builtin;
+  const custom = getCustomIncomeCategories().find(c => c.value === value);
+  if (custom) return custom;
+  return INCOME_CATEGORIES[INCOME_CATEGORIES.length - 1];
 }

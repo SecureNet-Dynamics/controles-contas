@@ -1,4 +1,23 @@
 
+// Converte uma data "YYYY-MM-DD" em Date local (evita o bug de fuso horário
+// de `new Date("YYYY-MM-DD")`, que é interpretado como UTC e "volta um dia"
+// em fusos negativos como o do Brasil)
+export const parseLocalDate = (dateStr: string): Date => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y || 1970, (m || 1) - 1, d || 1);
+};
+
+// Formata uma data "YYYY-MM-DD" no padrão brasileiro sem o bug de fuso horário
+export const formatDateBR = (dateStr: string): string => {
+  return parseLocalDate(dateStr).toLocaleDateString('pt-BR');
+};
+
+// Meia-noite local de hoje, para comparações de vencimento sem hora/minuto
+export const startOfToday = (): Date => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+};
+
 // Formata números no padrão brasileiro: 1.269,60
 export const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('pt-BR', {

@@ -1,75 +1,137 @@
 -- FinanceFlow Pro - Schema Supabase
--- Execute este SQL no SQL Editor do seu projeto Supabase
+-- Este script já foi executado no projeto "controle-contas" (sa-east-1).
+-- Mantido aqui como referência/versão do banco.
 
--- Tabela de Contas
-CREATE TABLE IF NOT EXISTS bills (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  amount DECIMAL(15,2) NOT NULL,
-  due_date TEXT NOT NULL, -- Stored as timezone-agnostic "YYYY-MM-DD"
-  paid BOOLEAN DEFAULT false,
-  category TEXT NOT NULL DEFAULT 'outros',
-  description TEXT,
-  installments INT,
-  current_installment INT,
-  recurring BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT now()
+-- ── Perfis de usuário (login por e-mail/senha via Supabase Auth) ───────────
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  nome text not null default '',
+  celular text,
+  created_at timestamptz default now()
 );
 
--- Tabela de Receitas
-CREATE TABLE IF NOT EXISTS incomes (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  description TEXT NOT NULL,
-  amount DECIMAL(15,2) NOT NULL,
-  date TEXT NOT NULL, -- Stored as timezone-agnostic "YYYY-MM-DD"
-  category TEXT NOT NULL DEFAULT 'outros',
-  received BOOLEAN DEFAULT false,
-  recurring BOOLEAN DEFAULT false,
-  recurring_period TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+alter table public.profiles enable row level security;
+
+create policy "profiles_select_own" on public.profiles for select using (auth.uid() = id);
+create policy "profiles_update_own" on public.profiles for update using (auth.uid() = id);
+create policy "profiles_insert_own" on public.profiles for insert with check (auth.uid() = id);
+
+-- Cria o perfil automaticamente quando um usuário se cadastra
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (id, nome, celular)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'nome', ''),
+    coalesce(new.raw_user_meta_data->>'celular', '')
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+revoke execute on function public.handle_new_user() from anon, authenticated, public;
+
+-- ── Contas a pagar ──────────────────────────────────────────────────────────
+create table if not exists public.bills (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  amount numeric(15,2) not null,
+  due_date text not null, -- "YYYY-MM-DD"
+  paid boolean default false,
+  paid_at timestamptz,
+  category text not null default 'outros',
+  description text,
+  installments int,
+  current_installment int,
+  recurring boolean default false,
+  created_at timestamptz default now()
 );
 
--- Tabela de Metas
-CREATE TABLE IF NOT EXISTS goals (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  category TEXT NOT NULL,
-  limit_amount DECIMAL(15,2) NOT NULL,
-  period TEXT NOT NULL DEFAULT 'monthly',
-  color TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+-- ── Receitas ─────────────────────────────────────────────────────────────────
+create table if not exists public.incomes (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  description text not null,
+  amount numeric(15,2) not null,
+  date text not null, -- "YYYY-MM-DD"
+  category text not null default 'outros',
+  received boolean default false,
+  recurring boolean default false,
+  recurring_period text,
+  created_at timestamptz default now()
 );
 
--- Tabela de Lembretes
-CREATE TABLE IF NOT EXISTS reminders (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  description TEXT,
-  date TEXT NOT NULL, -- Stored as timezone-agnostic "YYYY-MM-DD"
-  time TEXT,
-  completed BOOLEAN DEFAULT false,
-  bill_id TEXT REFERENCES bills(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
+-- ── Metas de orçamento ───────────────────────────────────────────────────────
+create table if not exists public.goals (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  category text not null,
+  limit_amount numeric(15,2) not null,
+  period text not null default 'monthly',
+  color text,
+  created_at timestamptz default now()
 );
 
--- Habilitar Row Level Security (RLS)
-ALTER TABLE bills ENABLE ROW LEVEL SECURITY;
-ALTER TABLE incomes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reminders ENABLE ROW LEVEL SECURITY;
+-- ── Lembretes ────────────────────────────────────────────────────────────────
+create table if not exists public.reminders (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  description text,
+  date text not null,
+  time text,
+  completed boolean default false,
+  bill_id text references public.bills(id) on delete set null,
+  created_at timestamptz default now()
+);
 
--- Políticas: usuário acessa e gerencia seus próprios dados baseado em seu user_id
-CREATE POLICY "bills_own" ON bills FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "incomes_own" ON incomes FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "goals_own" ON goals FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "reminders_own" ON reminders FOR ALL USING (true) WITH CHECK (true);
+-- ── Entradas previstas (trabalhos extras, freelas, etc) ────────────────────
+create table if not exists public.future_transactions (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  description text not null,
+  amount numeric(15,2) not null,
+  expected_date text not null,
+  received boolean default false,
+  created_at timestamptz default now()
+);
 
--- Índices para performance
-CREATE INDEX IF NOT EXISTS idx_bills_user ON bills(user_id);
-CREATE INDEX IF NOT EXISTS idx_bills_due_date ON bills(due_date);
-CREATE INDEX IF NOT EXISTS idx_incomes_user ON incomes(user_id);
-CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id);
-CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id);
+-- ── Saldo disponível do usuário ──────────────────────────────────────────────
+create table if not exists public.user_prefs (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  available_money numeric(15,2) not null default 0,
+  updated_at timestamptz default now()
+);
+
+-- ── RLS: cada usuário só acessa os próprios dados ───────────────────────────
+alter table public.bills enable row level security;
+alter table public.incomes enable row level security;
+alter table public.goals enable row level security;
+alter table public.reminders enable row level security;
+alter table public.future_transactions enable row level security;
+alter table public.user_prefs enable row level security;
+
+create policy "bills_own" on public.bills for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "incomes_own" on public.incomes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "goals_own" on public.goals for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "reminders_own" on public.reminders for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "future_transactions_own" on public.future_transactions for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "user_prefs_own" on public.user_prefs for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ── Índices ──────────────────────────────────────────────────────────────────
+create index if not exists idx_bills_user on public.bills(user_id);
+create index if not exists idx_bills_due_date on public.bills(due_date);
+create index if not exists idx_incomes_user on public.incomes(user_id);
+create index if not exists idx_goals_user on public.goals(user_id);
+create index if not exists idx_reminders_user on public.reminders(user_id);
+create index if not exists idx_future_transactions_user on public.future_transactions(user_id);

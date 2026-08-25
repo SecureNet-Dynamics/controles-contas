@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, X, Target, Trash2, AlertTriangle, CheckCircle2, TrendingUp } from 'lucide-react';
+import { Plus, X, Target, Trash2, AlertTriangle, CheckCircle2, TrendingUp, Pencil } from 'lucide-react';
 import { formatCurrency, parseFormattedNumber, formatInputCurrency } from '../utils/formatters';
 import type { Goal, Bill } from '../types';
 import { CATEGORIES, getCategoryInfo } from '../types';
+import CategorySelect from './CategorySelect';
 
 interface GoalsProps {
   goals: Goal[];
@@ -11,13 +12,19 @@ interface GoalsProps {
   bills: Bill[];
 }
 
-function GoalForm({ onClose, onSave }: {
+function GoalForm({ initial, onClose, onSave }: {
+  initial?: Goal;
   onClose: () => void;
   onSave: (goal: Omit<Goal, 'id'>) => void;
 }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => initial ? {
+    category: initial.category,
+    limitAmount: initial.limitAmount.toString().replace('.', ','),
+    period: initial.period,
+  } : {
     category: 'moradia', limitAmount: '', period: 'monthly' as Goal['period'],
   });
+  const isEditing = !!initial;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,24 +42,23 @@ function GoalForm({ onClose, onSave }: {
     <div className="modal-overlay">
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="modal-box p-6">
         <div className="flex items-center justify-between mb-5">
-          <h3 className="font-semibold text-ink">Nova Meta de Orçamento</h3>
+          <h3 className="font-semibold text-ink">{isEditing ? 'Editar Meta' : 'Nova Meta de Orçamento'}</h3>
           <button onClick={onClose} className="btn-ghost p-1.5"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-ink-muted mb-1.5">Categoria</label>
-            <select className="input" value={form.category}
-              onChange={e => setForm({ ...form, category: e.target.value })}>
-              {CATEGORIES.map(c => (
-                <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
-              ))}
-            </select>
+            <CategorySelect kind="bill" baseCategories={CATEGORIES} value={form.category}
+              onChange={cat => setForm({ ...form, category: cat })} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-muted mb-1.5">Limite de Gasto (R$)</label>
-            <input className="input" placeholder="0,00"
-              value={formatInputCurrency(form.limitAmount)}
-              onChange={e => setForm({ ...form, limitAmount: e.target.value })} required />
+            <label className="block text-xs font-medium text-ink-muted mb-1.5">Limite de Gasto</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm pointer-events-none">R$</span>
+              <input className="input pl-9" placeholder="0,00"
+                value={formatInputCurrency(form.limitAmount)}
+                onChange={e => setForm({ ...form, limitAmount: e.target.value })} required />
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-ink-muted mb-1.5">Período</label>
@@ -64,7 +70,7 @@ function GoalForm({ onClose, onSave }: {
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
-            <button type="submit" className="btn-primary flex-1">Criar Meta</button>
+            <button type="submit" className="btn-primary flex-1">{isEditing ? 'Salvar Alterações' : 'Criar Meta'}</button>
           </div>
         </form>
       </motion.div>
@@ -74,6 +80,7 @@ function GoalForm({ onClose, onSave }: {
 
 export default function Goals({ goals, setGoals, bills }: GoalsProps) {
   const [showForm, setShowForm] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
 
   const today = new Date();
   const currentMonth = today.getMonth();
@@ -103,6 +110,10 @@ export default function Goals({ goals, setGoals, bills }: GoalsProps) {
     }
   };
 
+  const handleEditSave = (id: string, data: Omit<Goal, 'id'>) => {
+    setGoals(prev => prev.map(g => g.id === id ? { ...g, ...data } : g));
+  };
+
   const handleDelete = (id: string) => {
     setGoals(prev => prev.filter(g => g.id !== id));
   };
@@ -127,9 +138,9 @@ export default function Goals({ goals, setGoals, bills }: GoalsProps) {
       {goals.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { label: 'Orçamento Total', value: formatCurrency(totalBudget), icon: Target, color: '#4F8EF7' },
-            { label: 'Gasto até agora', value: formatCurrency(totalSpent), icon: TrendingUp, color: totalSpent > totalBudget ? '#FF4D4D' : '#22D68A' },
-            { label: 'Metas no controle', value: `${goalsOk} de ${goals.length}`, icon: CheckCircle2, color: '#22D68A' },
+            { label: 'Orçamento Total', value: formatCurrency(totalBudget), icon: Target, color: '#8C9EFF' },
+            { label: 'Gasto até agora', value: formatCurrency(totalSpent), icon: TrendingUp, color: totalSpent > totalBudget ? '#FF6B6B' : '#4C97D6' },
+            { label: 'Metas no controle', value: `${goalsOk} de ${goals.length}`, icon: CheckCircle2, color: '#4C97D6' },
           ].map(k => {
             const Icon = k.icon;
             return (
@@ -137,9 +148,7 @@ export default function Goals({ goals, setGoals, bills }: GoalsProps) {
                 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
                 <div className="flex items-start justify-between">
                   <p className="text-xs font-medium text-ink-muted">{k.label}</p>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: k.color + '20' }}>
-                    <Icon size={16} style={{ color: k.color }} />
-                  </div>
+                  <Icon size={16} style={{ color: k.color }} strokeWidth={2} />
                 </div>
                 <p className="text-xl font-bold text-ink">{k.value}</p>
               </motion.div>
@@ -151,8 +160,8 @@ export default function Goals({ goals, setGoals, bills }: GoalsProps) {
       {/* Goals list */}
       {goals.length === 0 ? (
         <div className="card-p text-center py-12">
-          <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Target size={28} className="text-brand-600" />
+          <div className="w-16 h-16 bg-brand/15 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Target size={28} className="text-accent" />
           </div>
           <h3 className="font-semibold text-ink mb-2">Nenhuma meta criada</h3>
           <p className="text-sm text-ink-muted mb-6">
@@ -191,6 +200,10 @@ export default function Goals({ goals, setGoals, bills }: GoalsProps) {
                       {isOver && <AlertTriangle size={14} className="text-danger" />}
                       {isWarning && <AlertTriangle size={14} className="text-warning" />}
                       {!isOver && !isWarning && <CheckCircle2 size={14} className="text-brand" />}
+                      <button onClick={() => setEditingGoal(goal)}
+                        className="text-ink-faint hover:text-brand transition-colors p-1">
+                        <Pencil size={13} />
+                      </button>
                       <button onClick={() => handleDelete(goal.id)}
                         className="text-ink-faint hover:text-danger transition-colors p-1">
                         <Trash2 size={13} />
@@ -212,13 +225,13 @@ export default function Goals({ goals, setGoals, bills }: GoalsProps) {
                         animate={{ width: `${pct}%` }}
                         transition={{ duration: 0.8, ease: 'easeOut' }}
                         style={{
-                          background: isOver ? '#FF4D4D' : isWarning ? '#F5A623' : catInfo.color,
+                          background: isOver ? '#FF6B6B' : isWarning ? '#F5A623' : catInfo.color,
                         }}
                       />
                     </div>
                     <div className="flex items-center justify-between">
                       <span className={`text-xs font-medium ${
-                        isOver ? 'text-danger' : isWarning ? 'text-warning-dark' : 'text-brand-600'
+                        isOver ? 'text-danger' : isWarning ? 'text-warning-dark' : 'text-accent'
                       }`}>
                         {isOver
                           ? `Excedeu ${formatCurrency(spent - goal.limitAmount)}`
@@ -238,6 +251,13 @@ export default function Goals({ goals, setGoals, bills }: GoalsProps) {
 
       <AnimatePresence>
         {showForm && <GoalForm onClose={() => setShowForm(false)} onSave={handleAdd} />}
+        {editingGoal && (
+          <GoalForm
+            initial={editingGoal}
+            onClose={() => setEditingGoal(null)}
+            onSave={data => handleEditSave(editingGoal.id, data)}
+          />
+        )}
       </AnimatePresence>
     </motion.div>
   );

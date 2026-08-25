@@ -13,7 +13,7 @@ export default function LoadingScreen({ onLoadingComplete }: LoadingScreenProps)
   }, [onLoadingComplete]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: '#0A0A14' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: '#0A0B0E' }}>
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}

@@ -5,10 +5,9 @@ import { useState, useEffect } from 'react';
 interface CalculatorProps {
   isOpen: boolean;
   onClose: () => void;
-  darkMode: boolean;
 }
 
-export default function Calculator({ isOpen, onClose, darkMode }: CalculatorProps) {
+export default function Calculator({ isOpen, onClose }: CalculatorProps) {
   const [display, setDisplay] = useState('0');
   const [previousValue, setPreviousValue] = useState<number | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
@@ -173,30 +172,34 @@ export default function Calculator({ isOpen, onClose, darkMode }: CalculatorProp
     }
   };
 
+  const numKey = 'bg-surface-100 hover:bg-surface-200 text-ink';
+  const opKey = 'bg-brand hover:bg-brand-600 text-white';
+  const clearKey = 'bg-danger/10 hover:bg-danger/20 text-danger';
+
   const buttons = [
-    { label: 'C', action: clear, className: 'bg-red-400 hover:bg-red-500 text-white', span: 1 },
-    { label: 'CE', action: clearEntry, className: 'bg-red-400 hover:bg-red-500 text-white', span: 1 },
-    { label: '±', action: toggleSign, className: 'bg-gray-400 hover:bg-gray-500 text-white', span: 1 },
-    { label: '÷', action: () => performOperation('÷'), className: 'bg-pink-500 hover:bg-pink-600 text-white', span: 1 },
+    { label: 'C', action: clear, className: clearKey, span: 1 },
+    { label: 'CE', action: clearEntry, className: clearKey, span: 1 },
+    { label: '±', action: toggleSign, className: numKey, span: 1 },
+    { label: '÷', action: () => performOperation('÷'), className: opKey, span: 1 },
 
-    { label: '7', action: () => inputNumber('7'), className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 1 },
-    { label: '8', action: () => inputNumber('8'), className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 1 },
-    { label: '9', action: () => inputNumber('9'), className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 1 },
-    { label: '×', action: () => performOperation('×'), className: 'bg-pink-500 hover:bg-pink-600 text-white', span: 1 },
+    { label: '7', action: () => inputNumber('7'), className: numKey, span: 1 },
+    { label: '8', action: () => inputNumber('8'), className: numKey, span: 1 },
+    { label: '9', action: () => inputNumber('9'), className: numKey, span: 1 },
+    { label: '×', action: () => performOperation('×'), className: opKey, span: 1 },
 
-    { label: '4', action: () => inputNumber('4'), className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 1 },
-    { label: '5', action: () => inputNumber('5'), className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 1 },
-    { label: '6', action: () => inputNumber('6'), className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 1 },
-    { label: '-', action: () => performOperation('-'), className: 'bg-pink-500 hover:bg-pink-600 text-white', span: 1 },
+    { label: '4', action: () => inputNumber('4'), className: numKey, span: 1 },
+    { label: '5', action: () => inputNumber('5'), className: numKey, span: 1 },
+    { label: '6', action: () => inputNumber('6'), className: numKey, span: 1 },
+    { label: '-', action: () => performOperation('-'), className: opKey, span: 1 },
 
-    { label: '1', action: () => inputNumber('1'), className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 1 },
-    { label: '2', action: () => inputNumber('2'), className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 1 },
-    { label: '3', action: () => inputNumber('3'), className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 1 },
-    { label: '+', action: () => performOperation('+'), className: 'bg-pink-500 hover:bg-pink-600 text-white', span: 1 },
+    { label: '1', action: () => inputNumber('1'), className: numKey, span: 1 },
+    { label: '2', action: () => inputNumber('2'), className: numKey, span: 1 },
+    { label: '3', action: () => inputNumber('3'), className: numKey, span: 1 },
+    { label: '+', action: () => performOperation('+'), className: opKey, span: 1 },
 
-    { label: '0', action: () => inputNumber('0'), className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 2 },
-    { label: ',', action: inputDecimal, className: 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500', span: 1 },
-    { label: '=', action: calculate, className: 'bg-pink-500 hover:bg-pink-600 text-white', span: 1 },
+    { label: '0', action: () => inputNumber('0'), className: numKey, span: 2 },
+    { label: ',', action: inputDecimal, className: numKey, span: 1 },
+    { label: '=', action: calculate, className: opKey, span: 1 },
   ];
 
   return (
@@ -208,51 +211,32 @@ export default function Calculator({ isOpen, onClose, darkMode }: CalculatorProp
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 z-40"
+            className="fixed inset-0 bg-black/50 z-40"
             onClick={onClose}
           />
 
           {/* Calculadora */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            className={`fixed bottom-4 right-4 w-80 z-50 rounded-2xl shadow-2xl ${
-              darkMode ? 'bg-gray-800' : 'bg-white'
-            }`}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="fixed bottom-4 right-4 w-80 z-50 rounded-2xl shadow-modal bg-surface border border-surface-200"
           >
             {/* Header */}
-            <div className={`flex items-center justify-between p-4 border-b ${
-              darkMode ? 'border-gray-700' : 'border-baby-200'
-            }`}>
-              <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                Calculadora
-              </h3>
-              <button
-                onClick={onClose}
-                className={`p-1 rounded-lg ${
-                  darkMode
-                    ? 'hover:bg-gray-700 text-gray-300'
-                    : 'hover:bg-baby-100 text-gray-600'
-                }`}
-              >
+            <div className="flex items-center justify-between p-4 border-b border-surface-200">
+              <h3 className="font-semibold text-ink">Calculadora</h3>
+              <button onClick={onClose} className="p-1 rounded-lg hover:bg-surface-100 text-ink-muted hover:text-ink">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Display */}
-            <div className={`p-4 text-right ${
-              darkMode ? 'bg-gray-900' : 'bg-baby-50'
-            }`}>
-              <div className={`text-3xl font-mono font-bold ${
-                darkMode ? 'text-white' : 'text-gray-900'
-              }`}>
+            <div className="p-4 text-right bg-surface-50">
+              <div className="text-3xl font-mono font-semibold text-ink">
                 {formatDisplay(display)}
               </div>
               {previousValue !== null && operation && (
-                <div className={`text-sm mt-1 ${
-                  darkMode ? 'text-gray-400' : 'text-gray-500'
-                }`}>
+                <div className="text-sm mt-1 text-ink-faint">
                   {formatDisplay(previousValue.toString().replace('.', ','))} {operation}
                 </div>
               )}
@@ -265,15 +249,9 @@ export default function Calculator({ isOpen, onClose, darkMode }: CalculatorProp
                   <button
                     key={button.label}
                     onClick={button.action}
-                    className={`h-14 rounded-xl font-semibold text-lg transition-all duration-200 active:scale-95 ${
+                    className={`h-14 rounded-xl font-semibold text-lg transition-colors duration-150 active:scale-95 ${
                       button.className
-                    } ${
-                      button.span === 2 ? 'col-span-2' : ''
-                    } ${
-                      darkMode && !button.className.includes('bg-')
-                        ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                        : ''
-                    }`}
+                    } ${button.span === 2 ? 'col-span-2' : ''}`}
                   >
                     {button.label}
                   </button>

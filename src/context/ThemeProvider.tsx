@@ -1,4 +1,4 @@
-import { createContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 
 type ThemeContextType = {
   darkMode: boolean;
@@ -7,19 +7,25 @@ type ThemeContextType = {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [darkMode, setDarkMode] = useState(false);
+function getInitialDarkMode(): boolean {
+  try {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light') return false;
+    if (saved === 'dark') return true;
+  } catch { /* ignore */ }
+  return true; // padrão: modo escuro
+}
 
-  const toggleTheme = () => {
-    setDarkMode(!darkMode);
-  };
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [darkMode, setDarkMode] = useState(getInitialDarkMode);
+
+  const toggleTheme = () => setDarkMode(v => !v);
 
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', darkMode);
+    try {
+      localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+    } catch { /* ignore */ }
   }, [darkMode]);
 
   return (
@@ -29,3 +35,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+export function useTheme(): ThemeContextType {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error('useTheme deve ser usado dentro de um ThemeProvider');
+  return ctx;
+}

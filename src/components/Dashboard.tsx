@@ -7,9 +7,9 @@ import {
 import {
   Wallet, TrendingUp, TrendingDown, AlertCircle,
   Plus, X, CalendarDays, Trash2, ArrowUpRight, ArrowDownRight,
-  Clock, CheckCircle2, AlertTriangle,
+  Clock, AlertTriangle, PiggyBank,
 } from 'lucide-react';
-import { formatCurrency, parseFormattedNumber, formatInputCurrency } from '../utils/formatters';
+import { formatCurrency, parseFormattedNumber, formatInputCurrency, formatDateBR } from '../utils/formatters';
 import type { Bill, Income, FutureTransaction } from '../types';
 import { getCategoryInfo } from '../types';
 
@@ -48,27 +48,27 @@ function KpiCard({
       className="kpi-card"
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2 }}
       transition={{ duration: 0.25 }}
     >
       <div className="flex items-start justify-between">
         <p className="text-xs font-medium text-ink-muted">{label}</p>
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center`} style={{ background: color + '20' }}>
-          <Icon size={16} style={{ color }} />
-        </div>
+        <Icon size={16} style={{ color }} strokeWidth={2} />
       </div>
       {editing ? (
-        <input
-          autoFocus
-          className="input text-lg font-bold py-1"
-          value={raw}
-          onChange={e => setRaw(formatInputCurrency(e.target.value))}
-          onBlur={handleSave}
-          onKeyDown={e => {
-            if (e.key === 'Enter') handleSave();
-            if (e.key === 'Escape') setEditing(false);
-          }}
-        />
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm font-bold pointer-events-none">R$</span>
+          <input
+            autoFocus
+            className="input pl-9 text-lg font-bold py-1"
+            value={raw}
+            onChange={e => setRaw(formatInputCurrency(e.target.value))}
+            onBlur={handleSave}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleSave();
+              if (e.key === 'Escape') setEditing(false);
+            }}
+          />
+        </div>
       ) : (
         <button
           className={`text-left w-full ${editable ? 'cursor-text' : 'cursor-default'}`}
@@ -118,10 +118,13 @@ function AddTransactionModal({ onClose, onAdd }: {
               onChange={e => setForm({ ...form, description: e.target.value })} required />
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-muted mb-1.5">Valor (R$)</label>
-            <input className="input" placeholder="0,00"
-              value={formatInputCurrency(form.amount)}
-              onChange={e => setForm({ ...form, amount: e.target.value })} required />
+            <label className="block text-xs font-medium text-ink-muted mb-1.5">Valor</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm pointer-events-none">R$</span>
+              <input className="input pl-9" placeholder="0,00"
+                value={formatInputCurrency(form.amount)}
+                onChange={e => setForm({ ...form, amount: e.target.value })} required />
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-ink-muted mb-1.5">Data Prevista</label>
@@ -166,9 +169,15 @@ export default function Dashboard({
   const totalPaid = bills.filter(b => b.paid).reduce((s, b) => s + b.amount, 0);
   const totalPending = totalBills - totalPaid;
 
-  // Correct contábil balance calculation avoiding double counting received items
+  // Quanto ainda vai entrar: receitas pendentes + entradas previstas (trabalhos extras, freelas, etc)
   const totalPendingIncome = incomes.filter(i => !i.received).reduce((s, i) => s + i.amount, 0);
-  const balance = availableMoney + totalPendingIncome - totalPending;
+  const totalFuturePending = futureTransactions.filter(t => !t.received).reduce((s, t) => s + t.amount, 0);
+  const totalToReceive = totalPendingIncome + totalFuturePending;
+
+  // Quanto fica só de pagar as contas pendentes (sem contar o que ainda vai receber)
+  const balanceAfterBills = availableMoney - totalPending;
+  // Quanto sobra no final, contando o que ainda vai receber
+  const balance = availableMoney + totalToReceive - totalPending;
 
   const overdueBills = bills.filter(b => !b.paid && getDayDiff(b.dueDate) < 0);
   const dueSoonBills = bills.filter(b => {
@@ -244,18 +253,22 @@ export default function Dashboard({
       )}
 
       {/* KPI row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard label="Saldo Disponível" value={formatCurrency(availableMoney)}
-          sub="Clique para atualizar" icon={Wallet} color="#22D68A"
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+        <KpiCard label="Saldo Atual" value={formatCurrency(availableMoney)}
+          sub="Clique para atualizar" icon={Wallet} color="#4C97D6"
           editable onEdit={onMoneyChange} rawValue={availableMoney} />
-        <KpiCard label="Total em Contas" value={formatCurrency(totalBills)}
-          sub={`${bills.length} conta${bills.length !== 1 ? 's' : ''}`} icon={AlertCircle} color="#4F8EF7" />
-        <KpiCard label="Já Pago" value={formatCurrency(totalPaid)}
-          sub={`${bills.filter(b => b.paid).length} pagas`} icon={CheckCircle2} color="#22D68A" />
-        <KpiCard label="Saldo Final" value={formatCurrency(balance)}
+        <KpiCard label="A Receber" value={formatCurrency(totalToReceive)}
+          sub="Trabalhos extras e receitas pendentes" icon={ArrowDownRight} color="#7C83FD" />
+        <KpiCard label="Contas a Pagar" value={formatCurrency(totalPending)}
+          sub={`${bills.filter(b => !b.paid).length} pendente${bills.filter(b => !b.paid).length !== 1 ? 's' : ''}`} icon={AlertCircle} color="#F5A623" />
+        <KpiCard label="Após Pagar Contas" value={formatCurrency(balanceAfterBills)}
+          sub="Saldo atual menos contas pendentes"
+          icon={balanceAfterBills >= 0 ? PiggyBank : TrendingDown}
+          color={balanceAfterBills >= 0 ? '#4C97D6' : '#FF6B6B'} />
+        <KpiCard label="Vai Sobrar" value={formatCurrency(balance)}
           sub={balance >= 0 ? 'Positivo ✓' : 'Negativo ✗'}
           icon={balance >= 0 ? TrendingUp : TrendingDown}
-          color={balance >= 0 ? '#22D68A' : '#FF4D4D'} />
+          color={balance >= 0 ? '#4C97D6' : '#FF6B6B'} />
       </div>
 
       {/* Charts row */}
@@ -265,15 +278,15 @@ export default function Dashboard({
           <h3 className="font-semibold text-ink text-sm mb-4">Receitas vs Despesas (6 meses)</h3>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={monthlyData} barGap={2} margin={{ left: -10, right: 4 }}>
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B6B88' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#6B6B88' }} axisLine={false} tickLine={false}
+              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#8A8F99' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#8A8F99' }} axisLine={false} tickLine={false}
                 tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
               <Tooltip
-                contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12 }}
+                contentStyle={{ background: '#1A1C22', border: '1px solid #2A2D33', borderRadius: 8, fontSize: 12, color: '#F2F3F5' }}
                 formatter={(v: any) => formatCurrency(Number(v || 0))}
               />
-              <Bar dataKey="receitas" fill="#22D68A" radius={[4, 4, 0, 0]} name="Receitas" />
-              <Bar dataKey="despesas" fill="#4F8EF7" radius={[4, 4, 0, 0]} name="Despesas" />
+              <Bar dataKey="receitas" fill="#4C97D6" radius={[4, 4, 0, 0]} name="Receitas" />
+              <Bar dataKey="despesas" fill="#8C9EFF" radius={[4, 4, 0, 0]} name="Despesas" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -291,9 +304,9 @@ export default function Dashboard({
                   ))}
                 </Pie>
                 <Tooltip formatter={(v: any) => formatCurrency(Number(v || 0))}
-                  contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12 }} />
+                  contentStyle={{ background: '#1A1C22', border: '1px solid #2A2D33', borderRadius: 8, fontSize: 12, color: '#F2F3F5' }} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }}
-                  formatter={(v) => <span style={{ fontSize: 11, color: '#6B6B88' }}>{v}</span>} />
+                  formatter={(v) => <span style={{ fontSize: 11, color: '#8A8F99' }}>{v}</span>} />
               </PieChart>
             </ResponsiveContainer>
           ) : (
@@ -314,7 +327,7 @@ export default function Dashboard({
           ) : (
             <div className="space-y-2">
               {bills.slice(0, 6).map(bill => {
-                const overdue = !bill.paid && new Date(bill.dueDate) < today;
+                const overdue = !bill.paid && getDayDiff(bill.dueDate) < 0;
                 return (
                   <div key={bill.id} className="flex items-center justify-between py-2 border-b border-surface-100 last:border-0">
                     <div className="flex items-center gap-3 min-w-0">
@@ -322,13 +335,13 @@ export default function Dashboard({
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-ink truncate">{bill.name}</p>
                         <p className="text-xs text-ink-muted">
-                          {new Date(bill.dueDate).toLocaleDateString('pt-BR')}
+                          {formatDateBR(bill.dueDate)}
                         </p>
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0 ml-3">
                       <p className="text-sm font-semibold text-ink">{formatCurrency(bill.amount)}</p>
-                      <span className={`text-[10px] font-medium ${bill.paid ? 'text-brand-600' : overdue ? 'text-danger' : 'text-warning-dark'}`}>
+                      <span className={`text-[10px] font-medium ${bill.paid ? 'text-accent' : overdue ? 'text-danger' : 'text-warning-dark'}`}>
                         {bill.paid ? 'Pago' : overdue ? 'Atrasado' : 'Pendente'}
                       </span>
                     </div>
@@ -358,20 +371,20 @@ export default function Dashboard({
               {futureTransactions.map(t => (
                 <div key={t.id} className="flex items-center justify-between py-2 border-b border-surface-100 last:border-0">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${t.received ? 'bg-brand-100' : 'bg-info-light'}`}>
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${t.received ? 'bg-brand/15' : 'bg-info-light'}`}>
                       {t.received
-                        ? <ArrowDownRight size={14} className="text-brand-600" />
+                        ? <ArrowDownRight size={14} className="text-accent" />
                         : <ArrowUpRight size={14} className="text-info" />}
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-ink truncate">{t.description}</p>
-                      <p className="text-xs text-ink-muted">{new Date(t.expectedDate).toLocaleDateString('pt-BR')}</p>
+                      <p className="text-xs text-ink-muted">{formatDateBR(t.expectedDate)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-brand-600">{formatCurrency(t.amount)}</p>
-                      <span className={`text-[10px] ${t.received ? 'text-brand-600' : 'text-info'}`}>
+                      <p className="text-sm font-semibold text-accent">{formatCurrency(t.amount)}</p>
+                      <span className={`text-[10px] ${t.received ? 'text-accent' : 'text-info'}`}>
                         {t.received ? 'Recebido' : 'Previsto'}
                       </span>
                     </div>
@@ -384,7 +397,7 @@ export default function Dashboard({
               ))}
               <div className="pt-2 border-t border-surface-100 flex justify-between text-sm">
                 <span className="text-ink-muted">Total previsto:</span>
-                <span className="font-semibold text-brand-600">
+                <span className="font-semibold text-accent">
                   {formatCurrency(futureTransactions.reduce((s, t) => s + t.amount, 0))}
                 </span>
               </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Landmark, Shield, Zap, ChevronRight, CheckCircle2,
+  Shield, Zap, CheckCircle2,
   Lock, RefreshCw, Search, FileText, AlertCircle,
   Building2, CreditCard, TrendingUp, ArrowRight,
 } from 'lucide-react';
@@ -64,7 +64,7 @@ export default function OpenFinance() {
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'border-brand text-brand-600'
+                  ? 'border-brand text-accent'
                   : 'border-transparent text-ink-muted hover:text-ink'
               }`}>
               <Icon size={15} />
@@ -110,8 +110,8 @@ export default function OpenFinance() {
                   const Icon = f.icon;
                   return (
                     <div key={f.title} className="card-p flex gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-brand-100 flex items-center justify-center flex-shrink-0">
-                        <Icon size={16} className="text-brand-600" />
+                      <div className="w-9 h-9 rounded-lg bg-brand/15 flex items-center justify-center flex-shrink-0">
+                        <Icon size={16} className="text-accent" />
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-ink">{f.title}</p>
@@ -159,7 +159,7 @@ export default function OpenFinance() {
           {connectStep === 'success' && (
             <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
               className="card-p max-w-md mx-auto text-center py-10">
-              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 bg-brand/15 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 size={32} className="text-brand" />
               </div>
               <h3 className="font-bold text-ink text-lg">Banco conectado!</h3>
@@ -230,7 +230,7 @@ export default function OpenFinance() {
                 { step: '3', text: 'Boletos encontrados são importados automaticamente para suas contas' },
               ].map(s => (
                 <div key={s.step} className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                  <div className="w-6 h-6 rounded-full bg-brand/15 text-accent text-xs font-bold flex items-center justify-center flex-shrink-0">
                     {s.step}
                   </div>
                   <p className="text-sm text-ink-muted">{s.text}</p>
@@ -250,7 +250,7 @@ export default function OpenFinance() {
               Importar Extrato Bancário
             </h3>
             <div
-              className="border-2 border-dashed border-surface-200 rounded-xl p-8 text-center hover:border-brand hover:bg-brand-50/30 transition-all cursor-pointer"
+              className="border-2 border-dashed border-surface-200 rounded-xl p-8 text-center hover:border-brand hover:bg-brand/10 transition-all cursor-pointer"
               onDragOver={e => e.preventDefault()}
             >
               <div className="w-12 h-12 bg-surface-100 rounded-xl flex items-center justify-center mx-auto mb-3">

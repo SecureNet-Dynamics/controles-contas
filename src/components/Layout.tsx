@@ -38,15 +38,12 @@ export default function Layout({
         onMobileClose={() => setMobileOpen(false)}
         notificationCount={unreadCount}
         userName={user.nome}
+        onLogout={onLogout}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header
-          user={user}
-          onLogout={onLogout}
-          onSectionChange={onSectionChange}
           onMobileMenuToggle={() => setMobileOpen(true)}
-          notificationCount={unreadCount}
           onCalculatorToggle={() => setCalculatorOpen(v => !v)}
           activeSection={activeSection}
         />
@@ -61,7 +58,6 @@ export default function Layout({
       <Calculator
         isOpen={calculatorOpen}
         onClose={() => setCalculatorOpen(false)}
-        darkMode={false}
       />
     </div>
   );

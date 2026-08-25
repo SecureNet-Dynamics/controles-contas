@@ -7,7 +7,6 @@ interface CalendarProps {
   reminders: Reminder[];
   setReminders: (reminders: Reminder[]) => void;
   bills: Bill[];
-  darkMode: boolean;
   addNotification: (notification: { title: string; message: string; date: string; type: 'bill' | 'reminder' | 'system' | 'income' }) => void;
 }
 
@@ -132,16 +131,16 @@ export default function Calendar({ reminders, setReminders, bills, addNotificati
                   key={day}
                   className={`min-h-[60px] sm:min-h-[72px] rounded-lg p-1.5 border transition-colors overflow-hidden ${
                     todayCell
-                      ? 'border-brand bg-brand-50'
+                      ? 'border-brand bg-brand/10'
                       : 'border-surface-100 hover:bg-surface-50'
                   }`}
                 >
-                  <div className={`text-xs font-semibold mb-1 ${todayCell ? 'text-brand-600' : 'text-ink'}`}>
+                  <div className={`text-xs font-semibold mb-1 ${todayCell ? 'text-accent' : 'text-ink'}`}>
                     {day}
                   </div>
                   {dayReminders.slice(0, 2).map(r => (
                     <div key={r.id} className={`text-[10px] px-1 py-0.5 mb-0.5 rounded truncate ${
-                      r.completed ? 'bg-brand-100 text-brand-700' : 'bg-info-light text-info-dark'
+                      r.completed ? 'bg-brand/10 text-accent' : 'bg-info-light text-info-dark'
                     }`}>
                       {r.title}
                     </div>
@@ -171,7 +170,7 @@ export default function Calendar({ reminders, setReminders, bills, addNotificati
             ) : monthReminders.map(r => (
               <div key={r.id} className={`p-3 rounded-lg border ${
                 r.completed
-                  ? 'bg-brand-50 border-brand-100'
+                  ? 'bg-brand/10 border-brand/20'
                   : 'bg-surface-50 border-surface-200'
               }`}>
                 <div className="flex items-start justify-between gap-2">

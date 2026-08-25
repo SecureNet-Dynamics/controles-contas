@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid, AreaChart, Area,
 } from 'recharts';
 import { Download, TrendingUp, TrendingDown, Target, DollarSign } from 'lucide-react';
@@ -109,7 +109,7 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
             {(['3m', '6m', '12m'] as Period[]).map(p => (
               <button key={p} onClick={() => setPeriod(p)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  period === p ? 'bg-white shadow-card text-ink' : 'text-ink-muted hover:text-ink'
+                  period === p ? 'bg-surface shadow-card text-ink' : 'text-ink-muted hover:text-ink'
                 }`}>{p}</button>
             ))}
           </div>
@@ -122,9 +122,9 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total Despesas', value: formatCurrency(totalBills), icon: TrendingDown, color: '#FF4D4D', sub: `${bills.length} contas` },
-          { label: 'Total Receitas', value: formatCurrency(totalIncomeReceived), icon: TrendingUp, color: '#22D68A', sub: `${incomes.filter(i => i.received).length} entradas` },
-          { label: 'Taxa de Economia', value: `${savingsRate.toFixed(1)}%`, icon: Target, color: '#4F8EF7', sub: savingsRate >= 20 ? 'Excelente!' : 'Pode melhorar' },
+          { label: 'Total Despesas', value: formatCurrency(totalBills), icon: TrendingDown, color: '#FF6B6B', sub: `${bills.length} contas` },
+          { label: 'Total Receitas', value: formatCurrency(totalIncomeReceived), icon: TrendingUp, color: '#4C97D6', sub: `${incomes.filter(i => i.received).length} entradas` },
+          { label: 'Taxa de Economia', value: `${savingsRate.toFixed(1)}%`, icon: Target, color: '#8C9EFF', sub: savingsRate >= 20 ? 'Excelente!' : 'Pode melhorar' },
           { label: 'Pagamentos em Dia', value: `${onTimeRate.toFixed(0)}%`, icon: DollarSign, color: '#8B5CF6', sub: `${bills.filter(b => b.paid).length} de ${bills.length}` },
         ].map(kpi => {
           const Icon = kpi.icon;
@@ -133,10 +133,7 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
               <div className="flex items-start justify-between">
                 <p className="text-xs font-medium text-ink-muted">{kpi.label}</p>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                  style={{ background: kpi.color + '20' }}>
-                  <Icon size={16} style={{ color: kpi.color }} />
-                </div>
+                <Icon size={16} style={{ color: kpi.color }} strokeWidth={2} />
               </div>
               <p className="text-xl font-bold text-ink">{kpi.value}</p>
               <p className="text-xs text-ink-muted">{kpi.sub}</p>
@@ -152,22 +149,22 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
           <AreaChart data={monthlyData}>
             <defs>
               <linearGradient id="colorReceitas" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#22D68A" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#22D68A" stopOpacity={0} />
+                <stop offset="5%" stopColor="#4C97D6" stopOpacity={0.2} />
+                <stop offset="95%" stopColor="#4C97D6" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="colorDespesas" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#4F8EF7" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#4F8EF7" stopOpacity={0} />
+                <stop offset="5%" stopColor="#8C9EFF" stopOpacity={0.2} />
+                <stop offset="95%" stopColor="#8C9EFF" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B6B88' }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 11, fill: '#6B6B88' }} axisLine={false} tickLine={false}
+            <CartesianGrid strokeDasharray="3 3" stroke="#20232A" />
+            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#8A8F99' }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: '#8A8F99' }} axisLine={false} tickLine={false}
               tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
-            <Tooltip contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12 }}
+            <Tooltip contentStyle={{ background: '#1A1C22', border: '1px solid #2A2D33', borderRadius: 8, fontSize: 12, color: '#F2F3F5' }}
               formatter={(v: any) => formatCurrency(Number(v || 0))} />
-            <Area type="monotone" dataKey="receitas" stroke="#22D68A" fill="url(#colorReceitas)" strokeWidth={2} name="Receitas" />
-            <Area type="monotone" dataKey="despesas" stroke="#4F8EF7" fill="url(#colorDespesas)" strokeWidth={2} name="Despesas" />
+            <Area type="monotone" dataKey="receitas" stroke="#4C97D6" fill="url(#colorReceitas)" strokeWidth={2} name="Receitas" />
+            <Area type="monotone" dataKey="despesas" stroke="#8C9EFF" fill="url(#colorDespesas)" strokeWidth={2} name="Despesas" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -179,14 +176,14 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
           <h3 className="font-semibold text-ink text-sm mb-4">Economia Mensal</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={monthlyData} barSize={28}>
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B6B88' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#6B6B88' }} axisLine={false} tickLine={false}
+              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#8A8F99' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#8A8F99' }} axisLine={false} tickLine={false}
                 tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
-              <Tooltip contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12 }}
+              <Tooltip contentStyle={{ background: '#1A1C22', border: '1px solid #2A2D33', borderRadius: 8, fontSize: 12, color: '#F2F3F5' }}
                 formatter={(v: any) => formatCurrency(Number(v || 0))} />
               <Bar dataKey="economia" radius={[4, 4, 0, 0]} name="Economia"
-                fill="#22D68A"
-                label={{ position: 'top', fontSize: 10, fill: '#6B6B88',
+                fill="#4C97D6"
+                label={{ position: 'top', fontSize: 10, fill: '#8A8F99',
                   formatter: (v: any) => v !== 0 && v !== undefined ? formatCurrency(Number(v)) : '' }} />
             </BarChart>
           </ResponsiveContainer>
@@ -205,9 +202,9 @@ export default function Analytics({ bills, incomes }: AnalyticsProps) {
                   ))}
                 </Pie>
                 <Tooltip formatter={(v: any) => formatCurrency(Number(v || 0))}
-                  contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12 }} />
+                  contentStyle={{ background: '#1A1C22', border: '1px solid #2A2D33', borderRadius: 8, fontSize: 12, color: '#F2F3F5' }} />
                 <Legend iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle"
-                  formatter={(v) => <span style={{ fontSize: 11, color: '#6B6B88' }}>{v}</span>} />
+                  formatter={(v) => <span style={{ fontSize: 11, color: '#8A8F99' }}>{v}</span>} />
               </PieChart>
             </ResponsiveContainer>
           ) : (

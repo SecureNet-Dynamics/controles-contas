@@ -2,11 +2,12 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, X, CheckCircle2, Clock, Trash2, Download,
-  RefreshCw, TrendingUp, DollarSign, Calendar,
+  RefreshCw, DollarSign, Calendar, Pencil,
 } from 'lucide-react';
-import { formatCurrency, parseFormattedNumber, formatInputCurrency } from '../utils/formatters';
+import { formatCurrency, parseFormattedNumber, formatInputCurrency, formatDateBR } from '../utils/formatters';
 import type { Income, Notification } from '../types';
 import { INCOME_CATEGORIES, getIncomeCategoryInfo } from '../types';
+import CategorySelect from './CategorySelect';
 
 interface IncomeProps {
   incomes: Income[];
@@ -20,11 +21,21 @@ const emptyForm = {
   recurringPeriod: 'monthly' as Income['recurringPeriod'],
 };
 
-function IncomeForm({ onClose, onSave }: {
+function IncomeForm({ initial, onClose, onSave }: {
+  initial?: Income;
   onClose: () => void;
   onSave: (income: Omit<Income, 'id'>) => void;
 }) {
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => initial ? {
+    description: initial.description,
+    amount: initial.amount.toString().replace('.', ','),
+    date: initial.date,
+    category: initial.category,
+    received: initial.received,
+    recurring: initial.recurring,
+    recurringPeriod: initial.recurringPeriod || 'monthly' as Income['recurringPeriod'],
+  } : emptyForm);
+  const isEditing = !!initial;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +56,7 @@ function IncomeForm({ onClose, onSave }: {
     <div className="modal-overlay">
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="modal-box p-6">
         <div className="flex items-center justify-between mb-5">
-          <h3 className="font-semibold text-ink">Nova Receita</h3>
+          <h3 className="font-semibold text-ink">{isEditing ? 'Editar Receita' : 'Nova Receita'}</h3>
           <button onClick={onClose} className="btn-ghost p-1.5"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -56,10 +67,13 @@ function IncomeForm({ onClose, onSave }: {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-ink-muted mb-1.5">Valor (R$) *</label>
-              <input className="input" placeholder="0,00"
-                value={formatInputCurrency(form.amount)}
-                onChange={e => setForm({ ...form, amount: e.target.value })} required />
+              <label className="block text-xs font-medium text-ink-muted mb-1.5">Valor *</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm pointer-events-none">R$</span>
+                <input className="input pl-9" placeholder="0,00"
+                  value={formatInputCurrency(form.amount)}
+                  onChange={e => setForm({ ...form, amount: e.target.value })} required />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-ink-muted mb-1.5">Data *</label>
@@ -69,12 +83,8 @@ function IncomeForm({ onClose, onSave }: {
           </div>
           <div>
             <label className="block text-xs font-medium text-ink-muted mb-1.5">Categoria</label>
-            <select className="input" value={form.category}
-              onChange={e => setForm({ ...form, category: e.target.value })}>
-              {INCOME_CATEGORIES.map(c => (
-                <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
-              ))}
-            </select>
+            <CategorySelect kind="income" baseCategories={INCOME_CATEGORIES} value={form.category}
+              onChange={cat => setForm({ ...form, category: cat })} />
           </div>
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -103,7 +113,7 @@ function IncomeForm({ onClose, onSave }: {
           )}
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
-            <button type="submit" className="btn-primary flex-1">Salvar Receita</button>
+            <button type="submit" className="btn-primary flex-1">{isEditing ? 'Salvar Alterações' : 'Salvar Receita'}</button>
           </div>
         </form>
       </motion.div>
@@ -113,6 +123,7 @@ function IncomeForm({ onClose, onSave }: {
 
 export default function IncomeManager({ incomes, setIncomes, addNotification }: IncomeProps) {
   const [showForm, setShowForm] = useState(false);
+  const [editingIncome, setEditingIncome] = useState<Income | null>(null);
   const [filterReceived, setFilterReceived] = useState<'all' | 'received' | 'pending'>('all');
 
   const filtered = useMemo(() => {
@@ -129,6 +140,11 @@ export default function IncomeManager({ incomes, setIncomes, addNotification }: 
     const newIncome: Income = { ...data, id: Date.now().toString() };
     setIncomes(prev => [newIncome, ...prev]);
     addNotification({ title: 'Receita adicionada', message: `${data.description}: ${formatCurrency(data.amount)}`, date: new Date().toISOString(), type: 'income' });
+  };
+
+  const handleEditSave = (id: string, data: Omit<Income, 'id'>) => {
+    setIncomes(prev => prev.map(i => i.id === id ? { ...i, ...data } : i));
+    addNotification({ title: 'Receita atualizada', message: `${data.description}: ${formatCurrency(data.amount)}`, date: new Date().toISOString(), type: 'income' });
   };
 
   const handleToggle = (id: string) => {
@@ -174,9 +190,9 @@ export default function IncomeManager({ incomes, setIncomes, addNotification }: 
       {/* KPI cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: 'Total Recebido', value: formatCurrency(totalReceived), icon: CheckCircle2, color: '#22D68A', sub: `${incomes.filter(i => i.received).length} entradas` },
+          { label: 'Total Recebido', value: formatCurrency(totalReceived), icon: CheckCircle2, color: '#4C97D6', sub: `${incomes.filter(i => i.received).length} entradas` },
           { label: 'A Receber', value: formatCurrency(totalPending), icon: Clock, color: '#F5A623', sub: `${incomes.filter(i => !i.received).length} pendentes` },
-          { label: 'Renda Recorrente', value: formatCurrency(totalRecurring), icon: RefreshCw, color: '#4F8EF7', sub: `${incomes.filter(i => i.recurring).length} fixas` },
+          { label: 'Renda Recorrente', value: formatCurrency(totalRecurring), icon: RefreshCw, color: '#8C9EFF', sub: `${incomes.filter(i => i.recurring).length} fixas` },
         ].map(k => {
           const Icon = k.icon;
           return (
@@ -184,9 +200,7 @@ export default function IncomeManager({ incomes, setIncomes, addNotification }: 
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
               <div className="flex items-start justify-between">
                 <p className="text-xs font-medium text-ink-muted">{k.label}</p>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: k.color + '20' }}>
-                  <Icon size={16} style={{ color: k.color }} />
-                </div>
+                <Icon size={16} style={{ color: k.color }} strokeWidth={2} />
               </div>
               <p className="text-xl font-bold text-ink">{k.value}</p>
               <p className="text-xs text-ink-muted">{k.sub}</p>
@@ -201,7 +215,7 @@ export default function IncomeManager({ incomes, setIncomes, addNotification }: 
           {(['all', 'received', 'pending'] as const).map(f => (
             <button key={f} onClick={() => setFilterReceived(f)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                filterReceived === f ? 'bg-brand-100 text-brand-700' : 'text-ink-muted hover:bg-surface-100'
+                filterReceived === f ? 'bg-brand/10 text-accent' : 'text-ink-muted hover:bg-surface-100'
               }`}>
               {f === 'all' ? 'Todas' : f === 'received' ? 'Recebidas' : 'Pendentes'}
             </button>
@@ -239,7 +253,7 @@ export default function IncomeManager({ incomes, setIncomes, addNotification }: 
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-xs text-ink-muted flex items-center gap-1">
                           <Calendar size={10} />
-                          {new Date(income.date).toLocaleDateString('pt-BR')}
+                          {formatDateBR(income.date)}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium"
                           style={{ background: catInfo.color + '20', color: catInfo.color }}>
@@ -254,13 +268,17 @@ export default function IncomeManager({ incomes, setIncomes, addNotification }: 
                       </div>
                     </div>
                     <div className="text-right ml-3 flex-shrink-0">
-                      <p className="text-sm font-bold text-brand-600">+{formatCurrency(income.amount)}</p>
-                      <span className={`text-[10px] font-medium ${income.received ? 'text-brand-600' : 'text-warning-dark'}`}>
+                      <p className="text-sm font-bold text-accent">+{formatCurrency(income.amount)}</p>
+                      <span className={`text-[10px] font-medium ${income.received ? 'text-accent' : 'text-warning-dark'}`}>
                         {income.received ? '✓ Recebido' : '⏳ Pendente'}
                       </span>
                     </div>
+                    <button onClick={() => setEditingIncome(income)}
+                      className="ml-3 text-ink-faint hover:text-brand transition-colors p-1 flex-shrink-0">
+                      <Pencil size={14} />
+                    </button>
                     <button onClick={() => handleDelete(income.id)}
-                      className="ml-3 text-ink-faint hover:text-danger transition-colors p-1 flex-shrink-0">
+                      className="ml-1 text-ink-faint hover:text-danger transition-colors p-1 flex-shrink-0">
                       <Trash2 size={14} />
                     </button>
                   </motion.div>
@@ -273,6 +291,13 @@ export default function IncomeManager({ incomes, setIncomes, addNotification }: 
 
       <AnimatePresence>
         {showForm && <IncomeForm onClose={() => setShowForm(false)} onSave={handleAdd} />}
+        {editingIncome && (
+          <IncomeForm
+            initial={editingIncome}
+            onClose={() => setEditingIncome(null)}
+            onSave={data => handleEditSave(editingIncome.id, data)}
+          />
+        )}
       </AnimatePresence>
     </motion.div>
   );

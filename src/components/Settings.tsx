@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bell, Download, Upload, Trash2, User, Shield, Database, Wallet } from 'lucide-react';
+import { Bell, Download, Upload, Trash2, User, Shield, Database, Wallet, Pencil, Check, X, Loader2 } from 'lucide-react';
 import { isSupabaseEnabled } from '../lib/supabase';
+import { updateProfile } from '../lib/auth';
 import type { User as UserType } from '../types';
 
 interface SettingsProps {
   user: UserType;
   onLogout: () => void;
+  onUserUpdate: (user: UserType) => void;
 }
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -20,8 +22,28 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
   );
 }
 
-export default function Settings({ user, onLogout }: SettingsProps) {
+export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps) {
   const [notifications, setNotifications] = useState(true);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ nome: user.nome, celular: user.celular });
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const startEditProfile = () => {
+    setProfileForm({ nome: user.nome, celular: user.celular });
+    setEditingProfile(true);
+  };
+
+  const saveProfile = async () => {
+    if (!profileForm.nome.trim()) return;
+    setSavingProfile(true);
+    try {
+      await updateProfile(user.id, profileForm.nome.trim(), profileForm.celular.trim());
+      onUserUpdate({ ...user, nome: profileForm.nome.trim(), celular: profileForm.celular.trim() });
+      setEditingProfile(false);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const exportData = () => {
     const keys = ['bills', 'incomes', 'goals', 'reminders', 'futureTransactions', 'availableMoney'];
@@ -71,21 +93,54 @@ export default function Settings({ user, onLogout }: SettingsProps) {
 
       {/* Account */}
       <div className="card-p space-y-4">
-        <h3 className="font-semibold text-ink flex items-center gap-2 text-sm">
-          <User size={15} className="text-ink-muted" /> Conta
-        </h3>
-        <div className="flex items-center gap-4 p-3 bg-surface-50 rounded-xl">
-          <div className="w-12 h-12 rounded-full bg-brand-600 flex items-center justify-center">
-            <span className="text-white font-bold text-lg">
-              {user.nome.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
-            </span>
-          </div>
-          <div>
-            <p className="font-semibold text-ink">{user.nome}</p>
-            <p className="text-sm text-ink-muted">{user.email}</p>
-            {user.celular && <p className="text-xs text-ink-faint">{user.celular}</p>}
-          </div>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-ink flex items-center gap-2 text-sm">
+            <User size={15} className="text-ink-muted" /> Conta
+          </h3>
+          {!editingProfile && (
+            <button onClick={startEditProfile} className="btn-ghost !min-h-0 py-1.5 text-xs">
+              <Pencil size={13} /> Editar
+            </button>
+          )}
         </div>
+
+        {editingProfile ? (
+          <div className="p-3 bg-surface-50 rounded-xl space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-ink-muted mb-1.5">Nome completo</label>
+              <input className="input" value={profileForm.nome}
+                onChange={e => setProfileForm({ ...profileForm, nome: e.target.value })} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-muted mb-1.5">Celular</label>
+              <input className="input" value={profileForm.celular}
+                onChange={e => setProfileForm({ ...profileForm, celular: e.target.value })} />
+            </div>
+            <p className="text-xs text-ink-faint">O e-mail ({user.email}) não pode ser alterado aqui.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setEditingProfile(false)} className="btn-secondary text-xs py-2 flex-1">
+                <X size={13} /> Cancelar
+              </button>
+              <button onClick={saveProfile} disabled={savingProfile} className="btn-primary text-xs py-2 flex-1 disabled:opacity-60">
+                {savingProfile ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Salvar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-4 p-3 bg-surface-50 rounded-xl">
+            <div className="w-12 h-12 rounded-full bg-brand-600 flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-lg">
+                {user.nome.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-ink truncate">{user.nome}</p>
+              <p className="text-sm text-ink-muted truncate">{user.email}</p>
+              {user.celular && <p className="text-xs text-ink-faint truncate">{user.celular}</p>}
+            </div>
+          </div>
+        )}
+
         <button onClick={onLogout} className="btn-danger text-xs py-2">Sair da conta</button>
       </div>
 
@@ -109,7 +164,7 @@ export default function Settings({ user, onLogout }: SettingsProps) {
           <Database size={15} className="text-ink-muted" /> Banco de Dados
         </h3>
         <div className={`flex items-center gap-3 p-3 rounded-xl border ${
-          isSupabaseEnabled ? 'bg-brand-50 border-brand-200' : 'bg-surface-50 border-surface-200'
+          isSupabaseEnabled ? 'bg-brand/10 border-brand/20' : 'bg-surface-50 border-surface-200'
         }`}>
           <div className={`w-3 h-3 rounded-full ${isSupabaseEnabled ? 'bg-brand' : 'bg-warning'}`} />
           <div>
@@ -151,7 +206,7 @@ export default function Settings({ user, onLogout }: SettingsProps) {
           <Wallet size={15} className="text-ink-muted" /> Sobre
         </h3>
         <p className="text-xs text-ink-muted">FinanceFlow Pro · v2.0.0</p>
-        <p className="text-xs text-ink-faint">Seus dados ficam no seu dispositivo. Nenhuma informação financeira é enviada a servidores externos.</p>
+        <p className="text-xs text-ink-faint">Seus dados ficam protegidos na sua conta, sincronizados com segurança na nuvem (Supabase).</p>
       </div>
     </motion.div>
   );
