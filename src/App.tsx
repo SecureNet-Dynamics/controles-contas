@@ -16,19 +16,26 @@ import Auth from './components/CadastroForm';
 import type { Bill, Income, Goal, Reminder, Notification, FutureTransaction, User } from './types';
 import { onAuthChange, signOut, getStoredSessionUser } from './lib/auth';
 import { formatCurrency, parseLocalDate, startOfToday } from './utils/formatters';
+import { useCloudDeleteSync } from './hooks/useCloudDeleteSync';
+import type { SaveResult } from './lib/db';
 import {
   getBills,
   saveBills,
+  deleteBill,
   getIncomes,
   saveIncomes,
+  deleteIncome,
   getGoals,
   saveGoals,
+  deleteGoal,
   getReminders,
   saveReminders,
+  deleteReminder,
   getNotifications,
   saveNotifications,
   getFutureTransactions,
   saveFutureTransactions,
+  deleteFutureTransaction,
   getAvailableMoney,
   saveAvailableMoney,
 } from './lib/db';
@@ -46,6 +53,22 @@ export default function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [futureTransactions, setFutureTransactions] = useState<FutureTransaction[]>([]);
   const [availableMoney, setAvailableMoney] = useState<number>(0);
+
+  const addNotification = useCallback((n: Omit<Notification, 'id' | 'read'>) => {
+    const newN: Notification = { ...n, id: Date.now().toString(), read: false };
+    setNotifications(prev => [newN, ...prev.slice(0, 99)]);
+  }, []);
+
+  const notifyIfSaveFailed = useCallback((result: SaveResult, label: string) => {
+    if (!result.ok) {
+      addNotification({
+        title: `Não foi possível salvar ${label} na nuvem`,
+        message: result.message,
+        date: new Date().toISOString(),
+        type: 'system',
+      });
+    }
+  }, [addNotification]);
 
   // Custom wrapper setters to automatically adjust availableMoney cashflow contábil-style
   const setBillsAndDeduct = useCallback((action: React.SetStateAction<Bill[]>) => {
@@ -141,13 +164,22 @@ export default function App() {
   }, [loadUserData]);
 
   // ── Persist to cloud + local cache ──────────────────────────────────────
-  useEffect(() => { if (authChecked && user) saveBills(bills, user.id); }, [bills, authChecked, user]);
-  useEffect(() => { if (authChecked && user) saveIncomes(incomes, user.id); }, [incomes, authChecked, user]);
-  useEffect(() => { if (authChecked && user) saveGoals(goals, user.id); }, [goals, authChecked, user]);
-  useEffect(() => { if (authChecked && user) saveReminders(reminders, user.id); }, [reminders, authChecked, user]);
+  // Cada save* já tenta de novo uma vez sozinho; se ainda assim falhar, avisa
+  // em vez de deixar a tela parecer "salvo" enquanto nada chegou na nuvem.
+  useEffect(() => { if (authChecked && user) saveBills(bills, user.id).then(r => notifyIfSaveFailed(r, 'a conta')); }, [bills, authChecked, user, notifyIfSaveFailed]);
+  useEffect(() => { if (authChecked && user) saveIncomes(incomes, user.id).then(r => notifyIfSaveFailed(r, 'a receita')); }, [incomes, authChecked, user, notifyIfSaveFailed]);
+  useEffect(() => { if (authChecked && user) saveGoals(goals, user.id).then(r => notifyIfSaveFailed(r, 'a meta')); }, [goals, authChecked, user, notifyIfSaveFailed]);
+  useEffect(() => { if (authChecked && user) saveReminders(reminders, user.id).then(r => notifyIfSaveFailed(r, 'o lembrete')); }, [reminders, authChecked, user, notifyIfSaveFailed]);
   useEffect(() => { if (authChecked) saveNotifications(notifications); }, [notifications, authChecked]);
-  useEffect(() => { if (authChecked && user) saveFutureTransactions(futureTransactions, user.id); }, [futureTransactions, authChecked, user]);
-  useEffect(() => { if (authChecked && user) saveAvailableMoney(availableMoney, user.id); }, [availableMoney, authChecked, user]);
+  useEffect(() => { if (authChecked && user) saveFutureTransactions(futureTransactions, user.id).then(r => notifyIfSaveFailed(r, 'a entrada prevista')); }, [futureTransactions, authChecked, user, notifyIfSaveFailed]);
+  useEffect(() => { if (authChecked && user) saveAvailableMoney(availableMoney, user.id).then(r => notifyIfSaveFailed(r, 'o saldo')); }, [availableMoney, authChecked, user, notifyIfSaveFailed]);
+
+  // ── Exclusões: garante que o item some da nuvem também, não só da tela ──
+  useCloudDeleteSync(bills, authChecked, user, deleteBill, addNotification, 'a conta');
+  useCloudDeleteSync(incomes, authChecked, user, deleteIncome, addNotification, 'a receita');
+  useCloudDeleteSync(goals, authChecked, user, deleteGoal, addNotification, 'a meta');
+  useCloudDeleteSync(reminders, authChecked, user, deleteReminder, addNotification, 'o lembrete');
+  useCloudDeleteSync(futureTransactions, authChecked, user, deleteFutureTransaction, addNotification, 'a entrada prevista');
 
   // ── Avisos automáticos de vencimento (hoje ou nos próximos 3 dias) ───────
   useEffect(() => {
@@ -179,11 +211,6 @@ export default function App() {
   }, [bills, authChecked, user]);
 
   // ── Helpers ────────────────────────────────────────────────────────────
-  const addNotification = useCallback((n: Omit<Notification, 'id' | 'read'>) => {
-    const newN: Notification = { ...n, id: Date.now().toString(), read: false };
-    setNotifications(prev => [newN, ...prev.slice(0, 99)]);
-  }, []);
-
   const handleLogin = (userData: User) => {
     setUser(userData);
     loadUserData(userData.id).catch(console.error);

@@ -5,6 +5,8 @@
 import { supabase, isSupabaseEnabled } from './supabase';
 import type { Bill, Income, Goal, Reminder, Notification, FutureTransaction } from '../types';
 
+export type SaveResult = { ok: true } | { ok: false; message: string };
+
 // ── Local Storage helpers ──────────────────────────────────────────────────
 
 function lsGet<T>(key: string, fallback: T): T {
@@ -30,6 +32,33 @@ function withTimeout<T>(promise: PromiseLike<T>, ms = 8000): Promise<T | null> {
     Promise.resolve(promise),
     new Promise<null>(resolve => setTimeout(() => resolve(null), ms)),
   ]);
+}
+
+// Salva de verdade, com 1 nova tentativa se der timeout/erro na primeira vez
+// (ex.: rede instável no celular). Sem isso, uma gravação que falha em
+// silêncio faz o dado sumir no próximo recarregamento — parecia salvo (o
+// estado local mostrava certo) mas nunca chegou na nuvem de fato.
+async function withRetry(
+  attempt: () => PromiseLike<{ error: { message: string } | null }>
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  for (let i = 0; i < 2; i++) {
+    const result = await withTimeout(attempt(), 10000);
+    if (result && !result.error) return { ok: true };
+    if (i === 0) await new Promise(r => setTimeout(r, 1000));
+    else return { ok: false, message: result?.error?.message || 'Tempo esgotado ao salvar' };
+  }
+  return { ok: false, message: 'Tempo esgotado ao salvar' };
+}
+
+// Mesma ideia para leitura: tenta de novo antes de desistir e cair para o
+// cache local, para uma rede lenta (ex.: celular) não parecer "sem dados".
+async function fetchWithRetry<T>(attempt: () => PromiseLike<{ data: T | null; error: unknown }>): Promise<T | null> {
+  for (let i = 0; i < 2; i++) {
+    const result = await withTimeout(attempt(), 8000);
+    if (result && !result.error && result.data) return result.data;
+    if (i === 0) await new Promise(r => setTimeout(r, 800));
+  }
+  return null;
 }
 
 // ── Mappers between TypeScript (camelCase) and Postgres (snake_case) ──────────
@@ -144,93 +173,114 @@ function mapReminderFromDb(row: any): Reminder {
 
 export async function getBills(userId: string): Promise<Bill[]> {
   if (isSupabaseEnabled && supabase) {
-    const result = await withTimeout(supabase
+    const client = supabase;
+    const data = await fetchWithRetry(() => client
       .from('bills')
       .select('*')
       .eq('user_id', userId)
       .order('due_date', { ascending: true }));
-    if (result && !result.error && result.data) return result.data.map(mapBillFromDb);
+    if (data) return data.map(mapBillFromDb);
   }
   return lsGet<Bill[]>('bills', []);
 }
 
-export async function saveBills(bills: Bill[], userId?: string): Promise<void> {
+// Remove de verdade da nuvem — o upsert acima nunca apaga linhas que saíram
+// da lista local, então sem isso uma conta excluída simplesmente reaparecia
+// no próximo login/dispositivo.
+export async function deleteBill(id: string, userId?: string): Promise<SaveResult> {
+  if (!isSupabaseEnabled || !supabase || !userId) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('bills').delete().eq('id', id).eq('user_id', userId));
+}
+
+export async function saveBills(bills: Bill[], userId?: string): Promise<SaveResult> {
   lsSet('bills', bills);
-  if (isSupabaseEnabled && supabase && userId) {
-    // Delete existing and bulk upsert
-    // To prevent orphans or duplication, standard Supabase upsert will match primary keys.
-    await supabase.from('bills').upsert(
-      bills.map(b => mapBillToDb(b, userId))
-    );
-  }
+  if (!isSupabaseEnabled || !supabase || !userId || bills.length === 0) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('bills').upsert(bills.map(b => mapBillToDb(b, userId))));
 }
 
 // ── Incomes ────────────────────────────────────────────────────────────────
 
 export async function getIncomes(userId: string): Promise<Income[]> {
   if (isSupabaseEnabled && supabase) {
-    const result = await withTimeout(supabase
+    const client = supabase;
+    const data = await fetchWithRetry(() => client
       .from('incomes')
       .select('*')
       .eq('user_id', userId)
       .order('date', { ascending: false }));
-    if (result && !result.error && result.data) return result.data.map(mapIncomeFromDb);
+    if (data) return data.map(mapIncomeFromDb);
   }
   return lsGet<Income[]>('incomes', []);
 }
 
-export async function saveIncomes(incomes: Income[], userId?: string): Promise<void> {
+export async function deleteIncome(id: string, userId?: string): Promise<SaveResult> {
+  if (!isSupabaseEnabled || !supabase || !userId) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('incomes').delete().eq('id', id).eq('user_id', userId));
+}
+
+export async function saveIncomes(incomes: Income[], userId?: string): Promise<SaveResult> {
   lsSet('incomes', incomes);
-  if (isSupabaseEnabled && supabase && userId) {
-    await supabase.from('incomes').upsert(
-      incomes.map(i => mapIncomeToDb(i, userId))
-    );
-  }
+  if (!isSupabaseEnabled || !supabase || !userId || incomes.length === 0) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('incomes').upsert(incomes.map(i => mapIncomeToDb(i, userId))));
 }
 
 // ── Goals ──────────────────────────────────────────────────────────────────
 
 export async function getGoals(userId: string): Promise<Goal[]> {
   if (isSupabaseEnabled && supabase) {
-    const result = await withTimeout(supabase
+    const client = supabase;
+    const data = await fetchWithRetry(() => client
       .from('goals')
       .select('*')
       .eq('user_id', userId));
-    if (result && !result.error && result.data) return result.data.map(mapGoalFromDb);
+    if (data) return data.map(mapGoalFromDb);
   }
   return lsGet<Goal[]>('goals', []);
 }
 
-export async function saveGoals(goals: Goal[], userId?: string): Promise<void> {
+export async function deleteGoal(id: string, userId?: string): Promise<SaveResult> {
+  if (!isSupabaseEnabled || !supabase || !userId) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('goals').delete().eq('id', id).eq('user_id', userId));
+}
+
+export async function saveGoals(goals: Goal[], userId?: string): Promise<SaveResult> {
   lsSet('goals', goals);
-  if (isSupabaseEnabled && supabase && userId) {
-    await supabase.from('goals').upsert(
-      goals.map(g => mapGoalToDb(g, userId))
-    );
-  }
+  if (!isSupabaseEnabled || !supabase || !userId || goals.length === 0) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('goals').upsert(goals.map(g => mapGoalToDb(g, userId))));
 }
 
 // ── Reminders ─────────────────────────────────────────────────────────────
 
 export async function getReminders(userId: string): Promise<Reminder[]> {
   if (isSupabaseEnabled && supabase) {
-    const result = await withTimeout(supabase
+    const client = supabase;
+    const data = await fetchWithRetry(() => client
       .from('reminders')
       .select('*')
       .eq('user_id', userId)
       .order('date', { ascending: true }));
-    if (result && !result.error && result.data) return result.data.map(mapReminderFromDb);
+    if (data) return data.map(mapReminderFromDb);
   }
   return lsGet<Reminder[]>('reminders', []);
 }
 
-export async function saveReminders(reminders: Reminder[], userId?: string): Promise<void> {
+export async function deleteReminder(id: string, userId?: string): Promise<SaveResult> {
+  if (!isSupabaseEnabled || !supabase || !userId) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('reminders').delete().eq('id', id).eq('user_id', userId));
+}
+
+export async function saveReminders(reminders: Reminder[], userId?: string): Promise<SaveResult> {
   lsSet('reminders', reminders);
-  if (isSupabaseEnabled && supabase && userId) {
-    await supabase.from('reminders').upsert(
-      reminders.map(r => mapReminderToDb(r, userId))
-    );
-  }
+  if (!isSupabaseEnabled || !supabase || !userId || reminders.length === 0) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('reminders').upsert(reminders.map(r => mapReminderToDb(r, userId))));
 }
 
 // ── Available money (saldo atual) ───────────────────────────────────────────
@@ -251,15 +301,15 @@ export async function getAvailableMoney(userId?: string): Promise<number> {
   return parseFloat(localStorage.getItem('availableMoney') ?? '0') || 0;
 }
 
-export async function saveAvailableMoney(value: number, userId?: string): Promise<void> {
+export async function saveAvailableMoney(value: number, userId?: string): Promise<SaveResult> {
   localStorage.setItem('availableMoney', value.toString());
-  if (isSupabaseEnabled && supabase && userId) {
-    await supabase.from('user_prefs').upsert({
-      user_id: userId,
-      available_money: value,
-      updated_at: new Date().toISOString(),
-    });
-  }
+  if (!isSupabaseEnabled || !supabase || !userId) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('user_prefs').upsert({
+    user_id: userId,
+    available_money: value,
+    updated_at: new Date().toISOString(),
+  }));
 }
 
 // ── Notifications (local only) ──────────────────────────────────────────────
@@ -294,21 +344,26 @@ function mapFutureTransactionFromDb(row: any): FutureTransaction {
 
 export async function getFutureTransactions(userId?: string): Promise<FutureTransaction[]> {
   if (isSupabaseEnabled && supabase && userId) {
-    const result = await withTimeout(supabase
+    const client = supabase;
+    const data = await fetchWithRetry(() => client
       .from('future_transactions')
       .select('*')
       .eq('user_id', userId)
       .order('expected_date', { ascending: true }));
-    if (result && !result.error && result.data) return result.data.map(mapFutureTransactionFromDb);
+    if (data) return data.map(mapFutureTransactionFromDb);
   }
   return lsGet<FutureTransaction[]>('futureTransactions', []);
 }
 
-export async function saveFutureTransactions(t: FutureTransaction[], userId?: string): Promise<void> {
+export async function deleteFutureTransaction(id: string, userId?: string): Promise<SaveResult> {
+  if (!isSupabaseEnabled || !supabase || !userId) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('future_transactions').delete().eq('id', id).eq('user_id', userId));
+}
+
+export async function saveFutureTransactions(t: FutureTransaction[], userId?: string): Promise<SaveResult> {
   lsSet('futureTransactions', t);
-  if (isSupabaseEnabled && supabase && userId) {
-    await supabase.from('future_transactions').upsert(
-      t.map(item => mapFutureTransactionToDb(item, userId))
-    );
-  }
+  if (!isSupabaseEnabled || !supabase || !userId || t.length === 0) return { ok: true };
+  const client = supabase;
+  return withRetry(() => client.from('future_transactions').upsert(t.map(item => mapFutureTransactionToDb(item, userId))));
 }
